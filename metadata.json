@@ -1,0 +1,6 @@
+{
+  "name": "HyperFrames",
+  "description": "HTML-to-Video generation studio on Android with live preview, timeline scrubber, custom templates, and hardware-accelerated MP4 rendering.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
