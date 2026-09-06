@@ -32,6 +32,8 @@ class HtmlFrameCapturer(private val context: Context) {
         val wv = WebView(context).apply {
             layoutParams = ViewGroup.LayoutParams(width, height)
             setBackgroundColor(Color.BLACK)
+            // Software layer ensures reliable offscreen Canvas bitmap capture and avoids headless Mesa DRI rendernode issues
+            setLayerType(View.LAYER_TYPE_SOFTWARE, null)
             setInitialScale(100)
             settings.apply {
                 javaScriptEnabled = true
@@ -50,6 +52,13 @@ class HtmlFrameCapturer(private val context: Context) {
                     if (!loadDeferred.isCompleted) {
                         loadDeferred.complete(true)
                     }
+                }
+
+                override fun onRenderProcessGone(
+                    view: WebView?,
+                    detail: android.webkit.RenderProcessGoneDetail?
+                ): Boolean {
+                    return true
                 }
             }
         }

@@ -21,7 +21,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Css
 import androidx.compose.material.icons.filled.Html
@@ -29,11 +28,8 @@ import androidx.compose.material.icons.filled.Javascript
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
@@ -56,17 +52,20 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.saalpa.ui.theme.CapCutBlue
-import com.saalpa.ui.theme.CapCutCardBorder
-import com.saalpa.ui.theme.CapCutCardBorderSubtle
-import com.saalpa.ui.theme.CapCutCyan
-import com.saalpa.ui.theme.CapCutGreen
-import com.saalpa.ui.theme.CapCutPink
-import com.saalpa.ui.theme.CapCutSurface
-import com.saalpa.ui.theme.CapCutSurfaceVariant
-import com.saalpa.ui.theme.TextMuted
-import com.saalpa.ui.theme.TextPrimary
-import com.saalpa.ui.theme.TextSecondary
+import com.saalpa.ui.theme.StudioAccent
+import com.saalpa.ui.theme.StudioAccentLight
+import com.saalpa.ui.theme.StudioBg
+import com.saalpa.ui.theme.StudioBorder
+import com.saalpa.ui.theme.StudioBorderSubtle
+import com.saalpa.ui.theme.StudioDanger
+import com.saalpa.ui.theme.StudioPink
+import com.saalpa.ui.theme.StudioSky
+import com.saalpa.ui.theme.StudioSuccess
+import com.saalpa.ui.theme.StudioSurface
+import com.saalpa.ui.theme.StudioSurfaceVariant
+import com.saalpa.ui.theme.StudioTextMuted
+import com.saalpa.ui.theme.StudioTextPrimary
+import com.saalpa.ui.theme.StudioTextSecondary
 
 @Composable
 fun CodeEditor(
@@ -80,7 +79,7 @@ fun CodeEditor(
     modifier: Modifier = Modifier
 ) {
     var selectedTabIndex by remember { mutableIntStateOf(0) }
-    val tabs = listOf("HTML", "CSS", "JavaScript")
+    val tabs = listOf("HTML / DOM", "CSS Styles", "GSAP / JavaScript")
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
 
@@ -92,39 +91,34 @@ fun CodeEditor(
 
     val currentSnippets = when (selectedTabIndex) {
         0 -> listOf(
-            "<div class=\"layer\">",
-            "<h1 class=\"glitch\">",
-            "<div class=\"badge\">",
-            "<span class=\"highlight\">",
-            "<img src=\"...\" />",
-            "<canvas id=\"fx\">"
+            "<div class=\"scene\" id=\"scene-0\">",
+            "<div class=\"layer badge\">",
+            "<h1 class=\"headline\">",
+            "<div class=\"avatar-frame\">",
+            "<img src=\"...\" />"
         )
         1 -> listOf(
             "var(--progress)",
-            "var(--time)",
             "animation: pulse 2s infinite;",
-            "transform: scale(1.1);",
-            "backdrop-filter: blur(8px);",
-            "box-shadow: 0 0 20px #00F0FF;"
+            "backdrop-filter: blur(12px);",
+            "box-shadow: 0 0 24px rgba(79, 70, 229, 0.4);"
         )
         else -> listOf(
-            "gsap.to('.layer', { duration: 1, y: 0 })",
+            "gsap.to('.scene', { opacity: 1, duration: 0.5 })",
             "gsap.timeline({ paused: true })",
-            "window.HyperFrames.onTick()",
-            "canvas.getContext('2d')",
-            "Math.sin(time * 3)"
+            "window.HyperFrames.onSceneChange(0, 'scene-0', 'Intro')"
         )
     }
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(CapCutSurface)
+            .background(StudioBg)
     ) {
         // Top Action Bar
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            color = CapCutSurfaceVariant,
+            color = StudioSurface,
             shadowElevation = 4.dp
         ) {
             Row(
@@ -142,22 +136,22 @@ fun CodeEditor(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Назад в студию",
-                            tint = CapCutCyan
+                            tint = StudioAccentLight
                         )
                     }
                     Spacer(modifier = Modifier.width(4.dp))
                     Column {
                         Text(
-                            text = "HYPERFRAMES CODE STUDIO",
+                            text = "HYPERFRAMES CODE IDE",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            color = TextPrimary,
+                            color = StudioTextPrimary,
                             letterSpacing = 0.5.sp
                         )
                         Text(
-                            text = if (isModified) "Пользовательский код активен" else "Исходный код шаблона",
+                            text = if (isModified) "Пользовательский код активен" else "Авто-генерация на базе композиций сцен",
                             fontSize = 9.sp,
-                            color = if (isModified) CapCutGreen else TextMuted
+                            color = if (isModified) StudioSuccess else StudioTextMuted
                         )
                     }
                 }
@@ -174,7 +168,7 @@ fun CodeEditor(
                         Icon(
                             imageVector = Icons.Default.ContentCopy,
                             contentDescription = "Копировать",
-                            tint = TextSecondary,
+                            tint = StudioTextSecondary,
                             modifier = Modifier.size(16.dp)
                         )
                     }
@@ -184,14 +178,14 @@ fun CodeEditor(
                         IconButton(
                             onClick = {
                                 onReset()
-                                Toast.makeText(context, "Код сброшен к оригиналу", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "Код сброшен к композиции проекта", Toast.LENGTH_SHORT).show()
                             },
                             modifier = Modifier.size(32.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.RestartAlt,
                                 contentDescription = "Сбросить к оригиналу",
-                                tint = CapCutPink,
+                                tint = StudioDanger,
                                 modifier = Modifier.size(18.dp)
                             )
                         }
@@ -201,11 +195,11 @@ fun CodeEditor(
                     Button(
                         onClick = {
                             onBackToStudio()
-                            Toast.makeText(context, "Код применен к рендеру", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Код применен", Toast.LENGTH_SHORT).show()
                         },
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = CapCutCyan,
-                            contentColor = Color.Black
+                            containerColor = StudioAccent,
+                            contentColor = Color.White
                         ),
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 0.dp),
                         shape = RoundedCornerShape(6.dp),
@@ -223,33 +217,33 @@ fun CodeEditor(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(CapCutSurface)
+                .background(StudioSurface)
                 .padding(horizontal = 10.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             tabs.forEachIndexed { index, title ->
                 val isSelected = selectedTabIndex == index
                 val tabColor = when (index) {
-                    0 -> CapCutPink
-                    1 -> CapCutCyan
-                    else -> CapCutGreen
+                    0 -> StudioPink
+                    1 -> StudioSky
+                    else -> StudioAccentLight
                 }
 
                 Surface(
                     modifier = Modifier
                         .weight(1f)
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(RoundedCornerShape(6.dp))
                         .clickable { selectedTabIndex = index }
                         .testTag("code_tab_$title"),
-                    color = if (isSelected) tabColor.copy(alpha = 0.18f) else CapCutSurfaceVariant,
+                    color = if (isSelected) tabColor.copy(alpha = 0.15f) else StudioSurfaceVariant,
                     border = androidx.compose.foundation.BorderStroke(
                         1.dp,
-                        if (isSelected) tabColor else CapCutCardBorderSubtle
+                        if (isSelected) tabColor else StudioBorderSubtle
                     ),
-                    shape = RoundedCornerShape(8.dp)
+                    shape = RoundedCornerShape(6.dp)
                 ) {
                     Row(
-                        modifier = Modifier.padding(vertical = 8.dp),
+                        modifier = Modifier.padding(vertical = 7.dp),
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -260,15 +254,15 @@ fun CodeEditor(
                                 else -> Icons.Default.Javascript
                             },
                             contentDescription = null,
-                            tint = if (isSelected) tabColor else TextMuted,
-                            modifier = Modifier.size(16.dp)
+                            tint = if (isSelected) tabColor else StudioTextMuted,
+                            modifier = Modifier.size(15.dp)
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(5.dp))
                         Text(
                             text = title,
                             fontSize = 11.sp,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                            color = if (isSelected) tabColor else TextMuted
+                            color = if (isSelected) tabColor else StudioTextMuted
                         )
                     }
                 }
@@ -279,7 +273,7 @@ fun CodeEditor(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(CapCutSurface)
+                .background(StudioSurface)
                 .padding(horizontal = 10.dp, vertical = 4.dp)
                 .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -288,8 +282,8 @@ fun CodeEditor(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(6.dp))
-                        .background(CapCutSurfaceVariant)
-                        .border(1.dp, CapCutCardBorderSubtle, RoundedCornerShape(6.dp))
+                        .background(StudioSurfaceVariant)
+                        .border(1.dp, StudioBorderSubtle, RoundedCornerShape(6.dp))
                         .clickable {
                             when (selectedTabIndex) {
                                 0 -> onCodeChange(html + "\n" + snippet, css, js)
@@ -303,13 +297,13 @@ fun CodeEditor(
                         text = snippet,
                         fontSize = 10.sp,
                         fontFamily = FontFamily.Monospace,
-                        color = CapCutCyan
+                        color = StudioAccentLight
                     )
                 }
             }
         }
 
-        // Full Screen Code Text Area
+        // Full Screen Code Text Area (without video preview and without tracks!)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -329,16 +323,16 @@ fun CodeEditor(
                     fontFamily = FontFamily.Monospace,
                     fontSize = 12.sp,
                     lineHeight = 18.sp,
-                    color = TextPrimary
+                    color = StudioTextPrimary
                 ),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = CapCutCyan,
-                    unfocusedBorderColor = CapCutCardBorder,
-                    focusedContainerColor = CapCutSurfaceVariant,
-                    unfocusedContainerColor = CapCutSurfaceVariant,
-                    cursorColor = CapCutCyan
+                    focusedBorderColor = StudioAccent,
+                    unfocusedBorderColor = StudioBorder,
+                    focusedContainerColor = StudioSurfaceVariant,
+                    unfocusedContainerColor = StudioSurfaceVariant,
+                    cursorColor = StudioAccentLight
                 ),
-                shape = RoundedCornerShape(10.dp),
+                shape = RoundedCornerShape(8.dp),
                 modifier = Modifier
                     .fillMaxSize()
                     .testTag("code_editor_input")

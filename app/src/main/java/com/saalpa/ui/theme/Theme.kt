@@ -4,7 +4,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 
-private val CapCutColorScheme = darkColorScheme(
+private val HyperFramesStudioColorScheme = darkColorScheme(
     primary = PrimaryDark,
     onPrimary = OnPrimaryDark,
     primaryContainer = PrimaryContainerDark,
@@ -34,7 +34,7 @@ fun MyApplicationTheme(
     content: @Composable () -> Unit,
 ) {
     MaterialTheme(
-        colorScheme = CapCutColorScheme,
+        colorScheme = HyperFramesStudioColorScheme,
         typography = Typography,
         content = content
     )

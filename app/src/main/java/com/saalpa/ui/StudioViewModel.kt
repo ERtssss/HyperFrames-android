@@ -7,7 +7,6 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.saalpa.data.ImportedZipAsset
-import com.saalpa.data.MediaHelper
 import com.saalpa.data.TemplateRepository
 import com.saalpa.data.VideoStorageManager
 import com.saalpa.data.VoiceoverAudioService
@@ -16,17 +15,27 @@ import com.saalpa.engine.HyperFramesEngine
 import com.saalpa.engine.HyperFramesJsBridge
 import com.saalpa.model.AspectRatioType
 import com.saalpa.model.MediaAnimationType
-import com.saalpa.model.MediaOverlayItem
-import com.saalpa.model.MediaType
-import com.saalpa.model.PresetMediaAssets
+import com.saalpa.model.MediaAssetItem
+import com.saalpa.model.MediaCategoryType
 import com.saalpa.model.RenderConfiguration
 import com.saalpa.model.RenderResolution
 import com.saalpa.model.RenderState
 import com.saalpa.model.SavedVideo
-import com.saalpa.model.SceneMarker
 import com.saalpa.model.VideoEffectType
 import com.saalpa.model.VideoTemplate
-import com.saalpa.model.VoiceoverState
+import com.saalpa.model.project.DefaultProjectFactory
+import com.saalpa.model.project.ElementType
+import com.saalpa.model.project.ElementTransform
+import com.saalpa.model.project.HyperFrameAnimation
+import com.saalpa.model.project.HyperFrameElement
+import com.saalpa.model.project.HyperFrameScene
+import com.saalpa.model.project.HyperFramesProject
+import com.saalpa.model.project.ProjectHtmlCompiler
+import com.saalpa.model.project.SceneAvatarSettings
+import com.saalpa.model.project.SceneComposition
+import com.saalpa.model.project.SceneTransitionType
+import com.saalpa.model.project.SceneVoiceSettings
+import com.saalpa.ui.components.StudioActivePanel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,72 +45,54 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import org.json.JSONArray
+import java.io.File
 import java.util.Stack
-
-enum class StudioTab(val label: String, val iconRes: String) {
-    EDIT("Изменить", "ContentCut"),
-    ELEMENTS("Элементы", "Layers"),
-    AUDIO("Аудио", "MusicNote"),
-    MEDIA("Медиа", "FolderZip"),
-    CODE("Код", "Code"),
-    GALLERY("Галерея", "VideoLibrary")
-}
+import java.util.UUID
 
 data class StudioUiState(
-    val activeTab: StudioTab = StudioTab.EDIT,
-    val selectedTemplate: VideoTemplate = TemplateRepository.templates.first(),
-    val paramsMap: Map<String, String> = emptyMap(),
+    val project: HyperFramesProject = DefaultProjectFactory.createDefaultProject(),
+    val activeSceneId: String? = "scene_01",
+    val selectedElementId: String? = null,
+    val activePanel: StudioActivePanel = StudioActivePanel.SCRIPT,
+
+    // Playback & Timing
+    val currentTimeSec: Float = 0f,
+    val isPlaying: Boolean = false,
+    val playbackSpeed: Float = 1.0f,
+
+    // Code IDE
+    val isCodeEditorOpen: Boolean = false,
     val customHtml: String = "",
     val customCss: String = "",
     val customJs: String = "",
     val isCustomCodeActive: Boolean = false,
-    
-    // Timeline & Playback
-    val currentTimeSec: Float = 0f,
-    val durationSec: Float = 6.0f,
-    val isPlaying: Boolean = false,
-    val fps: Int = 30,
-    val playbackSpeed: Float = 1.0f,
-    val aspectRatio: AspectRatioType = AspectRatioType.PORTRAIT_9_16,
-    val resolution: RenderResolution = RenderResolution.HD_720P,
-    val timelineZoom: Float = 1.0f, // 1.0 .. 3.0
 
-    // Selected Timeline Element
-    val selectedElementId: String? = null,
+    // Voice Recording
+    val isRecordingVoiceover: Boolean = false,
+    val recordingDurationSec: Float = 0f,
 
-    // GSAP Scene Markers
-    val sceneMarkers: List<SceneMarker> = emptyList(),
-    val activeSceneIndex: Int = 0,
-    val activeSceneId: String = "",
-    val activeSceneTitle: String = "",
-
-    // Multi-track Overlays (Videos, Photos, Audio, Text, FX)
-    val mediaOverlays: List<MediaOverlayItem> = emptyList(),
-    val voiceoverState: VoiceoverState = VoiceoverState(),
-
-    // Media Hub & ZIP Assets
+    // Media & ZIP Hub
     val importedAssets: List<ImportedZipAsset> = emptyList(),
     val isImportingZip: Boolean = false,
 
-    // Settings & Dialogs
+    // Dialogs & Render
     val showSettingsDialog: Boolean = false,
-    val renderState: RenderState = RenderState.Idle,
     val showRenderDialog: Boolean = false,
+    val renderState: RenderState = RenderState.Idle,
+    val showExplainerDialog: Boolean = false,
 
     // Gallery
+    val isGalleryOpen: Boolean = false,
     val savedVideos: List<SavedVideo> = emptyList(),
     val selectedGalleryVideo: SavedVideo? = null,
 
-    // Info Modal
-    val showExplainerDialog: Boolean = false,
+    // History
     val canUndo: Boolean = false,
     val canRedo: Boolean = false
 ) {
-    val totalFrames: Int get() = (durationSec * fps).toInt().coerceAtLeast(1)
-    val currentFrameIndex: Int get() = ((currentTimeSec / durationSec) * totalFrames).toInt().coerceIn(0, totalFrames - 1)
-    val progress: Float get() = if (durationSec > 0f) (currentTimeSec / durationSec).coerceIn(0f, 1f) else 0f
-    val selectedItem: MediaOverlayItem? get() = mediaOverlays.find { it.id == selectedElementId }
+    val activeScene: HyperFrameScene? get() = project.scenes.find { it.id == activeSceneId } ?: project.scenes.firstOrNull()
+    val selectedElement: HyperFrameElement? get() = activeScene?.elements?.find { it.id == selectedElementId }
+    val totalDurationSec: Float get() = project.totalDurationSec
 }
 
 class StudioViewModel(application: Application) : AndroidViewModel(application) {
@@ -112,8 +103,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     private val voiceoverService = VoiceoverAudioService(context)
     private val zipMediaManager = ZipMediaManager(context)
 
-    private val undoStack = Stack<List<MediaOverlayItem>>()
-    private val redoStack = Stack<List<MediaOverlayItem>>()
+    private val undoStack = Stack<HyperFramesProject>()
+    private val redoStack = Stack<HyperFramesProject>()
 
     private val _uiState = MutableStateFlow(StudioUiState())
     val uiState: StateFlow<StudioUiState> = _uiState.asStateFlow()
@@ -123,13 +114,11 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     val jsBridge = HyperFramesJsBridge(
         onTimelineReadyListener = { durationSec, totalScenes, json ->
-            onJsTimelineReady(durationSec, totalScenes, json)
+            Log.d(TAG, "JS Timeline ready: duration=$durationSec, scenes=$totalScenes")
         },
-        onTickListener = { timeSec, prog, isPlay ->
-            onJsTick(timeSec, prog, isPlay)
-        },
+        onTickListener = { timeSec, prog, isPlay -> },
         onSceneChangeListener = { index, id, title ->
-            onJsSceneChange(index, id, title)
+            _uiState.update { it.copy(activeSceneId = id) }
         },
         onLogListener = { lvl, msg ->
             Log.d(TAG, "[$lvl] $msg")
@@ -137,53 +126,531 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     )
 
     init {
-        // Initialize with standard mobile video starter project (CapCut default without presets)
-        val defaultTemplate = TemplateRepository.templates.first()
-        val initialParams = defaultTemplate.params.associate { it.key to it.defaultValue }
-        
-        val initialOverlays = listOf(
-            MediaOverlayItem(
-                id = "default_title_text",
-                type = MediaType.TEXT,
-                title = "Главный заголовок",
-                textContent = "CAPCUT EDITOR",
-                textColor = "#00F0FF",
-                fontSizeSp = 32,
-                startTimeSec = 0.5f,
-                durationSec = 4.0f,
-                xPercent = 50f,
-                yPercent = 25f,
-                animation = MediaAnimationType.ZOOM_IN
-            ),
-            MediaOverlayItem(
-                id = "default_bg_glow",
-                type = MediaType.EFFECT,
-                title = "Neon Glow Effect",
-                effectType = VideoEffectType.NEON_GLOW,
-                startTimeSec = 0f,
-                durationSec = 6.0f,
-                opacity = 0.7f
-            )
-        )
-
+        val starter = DefaultProjectFactory.createDefaultProject()
         _uiState.update {
             it.copy(
-                selectedTemplate = defaultTemplate,
-                paramsMap = initialParams,
-                customHtml = defaultTemplate.htmlBody,
-                customCss = defaultTemplate.cssStyle,
-                customJs = defaultTemplate.jsScript,
-                durationSec = 6.0f,
-                fps = 30,
-                aspectRatio = AspectRatioType.PORTRAIT_9_16,
-                mediaOverlays = initialOverlays
+                project = starter,
+                activeSceneId = starter.scenes.firstOrNull()?.id
             )
         }
-
         refreshGallery()
         observeVoiceoverService()
         loadImportedAssets()
     }
+
+    private fun pushUndo() {
+        undoStack.push(_uiState.value.project)
+        redoStack.clear()
+        _uiState.update { it.copy(canUndo = undoStack.isNotEmpty(), canRedo = redoStack.isNotEmpty()) }
+    }
+
+    fun undo() {
+        if (undoStack.isNotEmpty()) {
+            val prev = undoStack.pop()
+            redoStack.push(_uiState.value.project)
+            _uiState.update {
+                it.copy(
+                    project = prev,
+                    canUndo = undoStack.isNotEmpty(),
+                    canRedo = redoStack.isNotEmpty()
+                )
+            }
+        }
+    }
+
+    fun redo() {
+        if (redoStack.isNotEmpty()) {
+            val next = redoStack.pop()
+            undoStack.push(_uiState.value.project)
+            _uiState.update {
+                it.copy(
+                    project = next,
+                    canUndo = undoStack.isNotEmpty(),
+                    canRedo = redoStack.isNotEmpty()
+                )
+            }
+        }
+    }
+
+    // --- Scene Management ---
+
+    fun selectScene(sceneId: String) {
+        val startSec = _uiState.value.project.getSceneStartTime(sceneId)
+        _uiState.update {
+            it.copy(
+                activeSceneId = sceneId,
+                selectedElementId = null,
+                currentTimeSec = startSec
+            )
+        }
+    }
+
+    fun addScene() {
+        pushUndo()
+        val currentScenes = _uiState.value.project.scenes
+        val newIndex = currentScenes.size
+        val newScene = HyperFrameScene(
+            id = "scene_${UUID.randomUUID().toString().take(8)}",
+            index = newIndex,
+            title = "Сцена ${newIndex + 1}",
+            script = "Текст диктора для новой сцены...",
+            durationSec = 4.0f,
+            transition = SceneTransitionType.FADE,
+            avatar = SceneAvatarSettings(
+                characterName = "Alex Host",
+                isEnabled = true
+            ),
+            composition = SceneComposition(
+                backgroundGradient = "radial-gradient(circle at 50% 30%, #1e1b4b 0%, #09081a 100%)"
+            ),
+            elements = listOf(
+                HyperFrameElement(
+                    id = "el_${UUID.randomUUID().toString().take(6)}",
+                    type = ElementType.TEXT,
+                    name = "Заголовок сцены",
+                    textContent = "СЦЕНА ${newIndex + 1}",
+                    fontSizeSp = 40,
+                    textColorHex = "#FFFFFF",
+                    transform = ElementTransform(xPercent = 50f, yPercent = 40f, scale = 1.0f),
+                    animation = HyperFrameAnimation(type = MediaAnimationType.ZOOM_IN)
+                )
+            )
+        )
+
+        val updatedScenes = currentScenes + newScene
+        val updatedProject = _uiState.value.project.copy(scenes = updatedScenes)
+        _uiState.update {
+            it.copy(
+                project = updatedProject,
+                activeSceneId = newScene.id
+            )
+        }
+    }
+
+    fun duplicateScene(sceneId: String) {
+        val scene = _uiState.value.project.scenes.find { it.id == sceneId } ?: return
+        pushUndo()
+        val currentScenes = _uiState.value.project.scenes
+        val index = currentScenes.indexOf(scene)
+        val copy = scene.copy(
+            id = "scene_${UUID.randomUUID().toString().take(8)}",
+            title = "${scene.title} (Копия)",
+            elements = scene.elements.map { it.copy(id = "el_${UUID.randomUUID().toString().take(6)}") }
+        )
+        val updated = currentScenes.toMutableList().apply { add(index + 1, copy) }
+        _uiState.update {
+            it.copy(
+                project = it.project.copy(scenes = updated),
+                activeSceneId = copy.id
+            )
+        }
+    }
+
+    fun deleteScene(sceneId: String) {
+        val currentScenes = _uiState.value.project.scenes
+        if (currentScenes.size <= 1) return // Keep at least one scene
+        pushUndo()
+        val updated = currentScenes.filterNot { it.id == sceneId }
+        val nextActive = updated.firstOrNull()?.id
+        _uiState.update {
+            it.copy(
+                project = it.project.copy(scenes = updated),
+                activeSceneId = nextActive,
+                selectedElementId = null
+            )
+        }
+    }
+
+    fun moveSceneUp(sceneId: String) {
+        val currentScenes = _uiState.value.project.scenes.toMutableList()
+        val index = currentScenes.indexOfFirst { it.id == sceneId }
+        if (index > 0) {
+            pushUndo()
+            val temp = currentScenes[index]
+            currentScenes[index] = currentScenes[index - 1]
+            currentScenes[index - 1] = temp
+            _uiState.update { it.copy(project = it.project.copy(scenes = currentScenes)) }
+        }
+    }
+
+    fun moveSceneDown(sceneId: String) {
+        val currentScenes = _uiState.value.project.scenes.toMutableList()
+        val index = currentScenes.indexOfFirst { it.id == sceneId }
+        if (index >= 0 && index < currentScenes.size - 1) {
+            pushUndo()
+            val temp = currentScenes[index]
+            currentScenes[index] = currentScenes[index + 1]
+            currentScenes[index + 1] = temp
+            _uiState.update { it.copy(project = it.project.copy(scenes = currentScenes)) }
+        }
+    }
+
+    fun updateSceneTitle(sceneId: String, newTitle: String) {
+        _uiState.update { state ->
+            val updated = state.project.scenes.map { if (it.id == sceneId) it.copy(title = newTitle) else it }
+            state.copy(project = state.project.copy(scenes = updated))
+        }
+    }
+
+    fun updateSceneScript(sceneId: String, newScript: String) {
+        _uiState.update { state ->
+            val updated = state.project.scenes.map { if (it.id == sceneId) it.copy(script = newScript) else it }
+            state.copy(project = state.project.copy(scenes = updated))
+        }
+    }
+
+    fun updateSceneDuration(sceneId: String, durationSec: Float) {
+        val validDuration = durationSec.coerceIn(0.5f, 30.0f)
+        _uiState.update { state ->
+            val updated = state.project.scenes.map { if (it.id == sceneId) it.copy(durationSec = validDuration) else it }
+            state.copy(project = state.project.copy(scenes = updated))
+        }
+    }
+
+    fun changeSceneDurationDelta(sceneId: String, deltaSec: Float) {
+        val scene = _uiState.value.project.scenes.find { it.id == sceneId } ?: return
+        updateSceneDuration(sceneId, scene.durationSec + deltaSec)
+    }
+
+    fun updateSceneTransition(sceneId: String, transition: SceneTransitionType) {
+        pushUndo()
+        _uiState.update { state ->
+            val updated = state.project.scenes.map { if (it.id == sceneId) it.copy(transition = transition) else it }
+            state.copy(project = state.project.copy(scenes = updated))
+        }
+    }
+
+    fun updateSceneBackground(sceneId: String, bgGradient: String) {
+        pushUndo()
+        _uiState.update { state ->
+            val updated = state.project.scenes.map {
+                if (it.id == sceneId) it.copy(composition = it.composition.copy(backgroundGradient = bgGradient)) else it
+            }
+            state.copy(project = state.project.copy(scenes = updated))
+        }
+    }
+
+    fun updateSceneAvatar(sceneId: String, avatar: SceneAvatarSettings) {
+        _uiState.update { state ->
+            val updated = state.project.scenes.map { if (it.id == sceneId) it.copy(avatar = avatar) else it }
+            state.copy(project = state.project.copy(scenes = updated))
+        }
+    }
+
+    fun updateSceneVoice(sceneId: String, voice: SceneVoiceSettings) {
+        _uiState.update { state ->
+            val updated = state.project.scenes.map { if (it.id == sceneId) it.copy(voice = voice) else it }
+            state.copy(project = state.project.copy(scenes = updated))
+        }
+    }
+
+    fun toggleSceneAvatar(sceneId: String, enabled: Boolean) {
+        _uiState.update { state ->
+            val updated = state.project.scenes.map {
+                if (it.id == sceneId) it.copy(avatar = it.avatar.copy(isEnabled = enabled)) else it
+            }
+            state.copy(project = state.project.copy(scenes = updated))
+        }
+    }
+
+    // --- Element Management ---
+
+    fun selectElement(elementId: String?) {
+        _uiState.update {
+            it.copy(
+                selectedElementId = elementId,
+                activePanel = if (elementId != null) StudioActivePanel.INSPECTOR else it.activePanel
+            )
+        }
+    }
+
+    fun addTextElementToActiveScene(
+        text: String = "Новый заголовок",
+        colorHex: String = "#FFFFFF",
+        fontSizeSp: Int = 36
+    ) {
+        val activeId = _uiState.value.activeSceneId ?: return
+        pushUndo()
+        val newEl = HyperFrameElement(
+            id = "el_${UUID.randomUUID().toString().take(6)}",
+            type = ElementType.TEXT,
+            name = "Текст",
+            textContent = text,
+            fontSizeSp = fontSizeSp,
+            textColorHex = colorHex,
+            transform = ElementTransform(xPercent = 50f, yPercent = 50f, scale = 1.0f),
+            animation = HyperFrameAnimation(type = MediaAnimationType.ZOOM_IN)
+        )
+        _uiState.update { state ->
+            val updatedScenes = state.project.scenes.map { sc ->
+                if (sc.id == activeId) sc.copy(elements = sc.elements + newEl) else sc
+            }
+            state.copy(
+                project = state.project.copy(scenes = updatedScenes),
+                selectedElementId = newEl.id,
+                activePanel = StudioActivePanel.INSPECTOR
+            )
+        }
+    }
+
+    fun addImageElementToActiveScene(uri: String, name: String = "Изображение") {
+        val activeId = _uiState.value.activeSceneId ?: return
+        pushUndo()
+        val newEl = HyperFrameElement(
+            id = "el_${UUID.randomUUID().toString().take(6)}",
+            type = ElementType.IMAGE,
+            name = name,
+            sourceUri = uri,
+            transform = ElementTransform(xPercent = 50f, yPercent = 50f, scale = 1.0f),
+            animation = HyperFrameAnimation(type = MediaAnimationType.FADE)
+        )
+        _uiState.update { state ->
+            val updatedScenes = state.project.scenes.map { sc ->
+                if (sc.id == activeId) sc.copy(elements = sc.elements + newEl) else sc
+            }
+            state.copy(
+                project = state.project.copy(scenes = updatedScenes),
+                selectedElementId = newEl.id,
+                activePanel = StudioActivePanel.INSPECTOR
+            )
+        }
+    }
+
+    fun addEffectElementToActiveScene(effectType: VideoEffectType) {
+        val activeId = _uiState.value.activeSceneId ?: return
+        pushUndo()
+        val newEl = HyperFrameElement(
+            id = "el_${UUID.randomUUID().toString().take(6)}",
+            type = ElementType.EFFECT,
+            name = effectType.title.split("(").first().trim(),
+            effectType = effectType,
+            transform = ElementTransform(opacity = 0.8f)
+        )
+        _uiState.update { state ->
+            val updatedScenes = state.project.scenes.map { sc ->
+                if (sc.id == activeId) sc.copy(elements = sc.elements + newEl) else sc
+            }
+            state.copy(
+                project = state.project.copy(scenes = updatedScenes),
+                selectedElementId = newEl.id,
+                activePanel = StudioActivePanel.INSPECTOR
+            )
+        }
+    }
+
+    fun updateElement(element: HyperFrameElement) {
+        val activeId = _uiState.value.activeSceneId ?: return
+        _uiState.update { state ->
+            val updatedScenes = state.project.scenes.map { sc ->
+                if (sc.id == activeId) {
+                    sc.copy(elements = sc.elements.map { if (it.id == element.id) element else it })
+                } else sc
+            }
+            state.copy(project = state.project.copy(scenes = updatedScenes))
+        }
+    }
+
+    fun deleteElement(elementId: String) {
+        val activeId = _uiState.value.activeSceneId ?: return
+        pushUndo()
+        _uiState.update { state ->
+            val updatedScenes = state.project.scenes.map { sc ->
+                if (sc.id == activeId) {
+                    sc.copy(elements = sc.elements.filterNot { it.id == elementId })
+                } else sc
+            }
+            state.copy(
+                project = state.project.copy(scenes = updatedScenes),
+                selectedElementId = null
+            )
+        }
+    }
+
+    fun addAssetToActiveScene(asset: MediaAssetItem) {
+        when (asset.category) {
+            MediaCategoryType.IMAGES -> addImageElementToActiveScene(asset.uri, asset.name)
+            MediaCategoryType.VIDEOS -> {
+                val activeId = _uiState.value.activeSceneId ?: return
+                pushUndo()
+                val newEl = HyperFrameElement(
+                    id = "el_${UUID.randomUUID().toString().take(6)}",
+                    type = ElementType.VIDEO,
+                    name = asset.name,
+                    sourceUri = asset.uri,
+                    transform = ElementTransform(xPercent = 50f, yPercent = 50f, scale = 1.0f)
+                )
+                _uiState.update { state ->
+                    val updatedScenes = state.project.scenes.map { sc ->
+                        if (sc.id == activeId) sc.copy(elements = sc.elements + newEl) else sc
+                    }
+                    state.copy(
+                        project = state.project.copy(scenes = updatedScenes),
+                        selectedElementId = newEl.id,
+                        activePanel = StudioActivePanel.INSPECTOR
+                    )
+                }
+            }
+            MediaCategoryType.AUDIO -> {
+                val activeId = _uiState.value.activeSceneId ?: return
+                pushUndo()
+                _uiState.update { state ->
+                    val updatedScenes = state.project.scenes.map { sc ->
+                        if (sc.id == activeId) sc.copy(voice = sc.voice.copy(audioPath = asset.uri)) else sc
+                    }
+                    state.copy(project = state.project.copy(scenes = updatedScenes))
+                }
+            }
+        }
+    }
+
+    // --- Studio Navigation & Panels ---
+
+    fun selectActivePanel(panel: StudioActivePanel) {
+        _uiState.update { it.copy(activePanel = panel) }
+    }
+
+    fun setProjectName(name: String) {
+        _uiState.update { it.copy(project = it.project.copy(name = name)) }
+    }
+
+    fun setAspectRatio(ratio: AspectRatioType) {
+        pushUndo()
+        _uiState.update { it.copy(project = it.project.copy(aspectRatio = ratio)) }
+    }
+
+    fun setResolution(res: RenderResolution) {
+        _uiState.update { it.copy(project = it.project.copy(resolution = res)) }
+    }
+
+    fun openCodeEditor(open: Boolean) {
+        _uiState.update {
+            if (open) {
+                val compiled = getCompiledHtmlForPreview()
+                it.copy(
+                    isCodeEditorOpen = true,
+                    customHtml = compiled,
+                    customCss = "",
+                    customJs = ""
+                )
+            } else {
+                it.copy(isCodeEditorOpen = false)
+            }
+        }
+    }
+
+    fun openGallery(open: Boolean) {
+        _uiState.update { it.copy(isGalleryOpen = open) }
+        if (open) refreshGallery()
+    }
+
+    fun setShowSettingsDialog(show: Boolean) {
+        _uiState.update { it.copy(showSettingsDialog = show) }
+    }
+
+    fun setShowExplainer(show: Boolean) {
+        _uiState.update { it.copy(showExplainerDialog = show) }
+    }
+
+    // --- Playback Engine ---
+
+    fun togglePlay() {
+        if (_uiState.value.isPlaying) pause() else play()
+    }
+
+    fun play() {
+        playbackJob?.cancel()
+        _uiState.update { it.copy(isPlaying = true) }
+
+        playbackJob = viewModelScope.launch {
+            val speed = _uiState.value.playbackSpeed
+            var initialTime = _uiState.value.currentTimeSec
+            val totalDuration = _uiState.value.totalDurationSec
+            if (initialTime >= totalDuration - 0.05f) {
+                initialTime = 0f
+            }
+
+            val startEpoch = System.currentTimeMillis() - ((initialTime / speed) * 1000L).toLong()
+
+            while (isActive && _uiState.value.isPlaying) {
+                val curSpeed = _uiState.value.playbackSpeed
+                val elapsedSec = ((System.currentTimeMillis() - startEpoch) / 1000f) * curSpeed
+                val dur = _uiState.value.totalDurationSec
+
+                if (elapsedSec >= dur) {
+                    _uiState.update { it.copy(currentTimeSec = 0f) }
+                    play()
+                    break
+                } else {
+                    _uiState.update { it.copy(currentTimeSec = elapsedSec) }
+                }
+                delay(25)
+            }
+        }
+    }
+
+    fun pause() {
+        playbackJob?.cancel()
+        playbackJob = null
+        _uiState.update { it.copy(isPlaying = false) }
+    }
+
+    fun seekTo(timeSec: Float) {
+        val dur = _uiState.value.totalDurationSec
+        val clamped = timeSec.coerceIn(0f, dur)
+        val activeScene = _uiState.value.project.getSceneAtTime(clamped)
+        _uiState.update {
+            it.copy(
+                currentTimeSec = clamped,
+                activeSceneId = activeScene?.id ?: it.activeSceneId
+            )
+        }
+    }
+
+    fun stepFrame(deltaFrames: Int) {
+        val state = _uiState.value
+        val frameDuration = 1f / state.project.fps.toFloat()
+        val nextTime = (state.currentTimeSec + deltaFrames * frameDuration).coerceIn(0f, state.totalDurationSec)
+        seekTo(nextTime)
+    }
+
+    // --- Voiceover Recording ---
+
+    private fun observeVoiceoverService() {
+        viewModelScope.launch {
+            voiceoverService.isRecording.collectLatest { isRec ->
+                _uiState.update { it.copy(isRecordingVoiceover = isRec) }
+            }
+        }
+        viewModelScope.launch {
+            voiceoverService.recordingDurationSec.collectLatest { dur ->
+                _uiState.update { it.copy(recordingDurationSec = dur) }
+            }
+        }
+    }
+
+    fun startVoiceoverRecording() {
+        voiceoverService.startRecording(viewModelScope)
+    }
+
+    fun stopVoiceoverRecording() {
+        val file = voiceoverService.stopRecording()
+        if (file != null && file.exists()) {
+            val activeId = _uiState.value.activeSceneId ?: return
+            _uiState.update { state ->
+                val updatedScenes = state.project.scenes.map { sc ->
+                    if (sc.id == activeId) sc.copy(voice = sc.voice.copy(audioPath = file.absolutePath)) else sc
+                }
+                state.copy(project = state.project.copy(scenes = updatedScenes))
+            }
+        }
+    }
+
+    fun playRecordedVoiceover() {
+        val path = _uiState.value.activeScene?.voice?.audioPath ?: return
+        voiceoverService.playAudio(path)
+    }
+
+    // --- Media & ZIP Hub ---
 
     fun loadImportedAssets() {
         viewModelScope.launch {
@@ -195,7 +662,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun importZipArchive(uri: Uri) {
         viewModelScope.launch {
             _uiState.update { it.copy(isImportingZip = true) }
-            val newAssets = zipMediaManager.unpackZip(uri)
+            zipMediaManager.unpackZip(uri)
             val all = zipMediaManager.loadAllImportedAssets()
             _uiState.update { it.copy(importedAssets = all, isImportingZip = false) }
         }
@@ -203,7 +670,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     fun importMediaFiles(uris: List<Uri>) {
         viewModelScope.launch {
-            val newAssets = zipMediaManager.importFiles(uris)
+            zipMediaManager.importFiles(uris)
             val all = zipMediaManager.loadAllImportedAssets()
             _uiState.update { it.copy(importedAssets = all) }
         }
@@ -217,549 +684,69 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun addImportedAssetToTimeline(asset: ImportedZipAsset) {
-        pushUndo()
-        val state = _uiState.value
-        val source = asset.dataUrl ?: asset.file.toURI().toString()
-        val newItem = when (asset.mediaType) {
-            MediaType.BGM, MediaType.VOICEOVER -> {
-                MediaOverlayItem(
-                    type = asset.mediaType,
-                    title = asset.name,
-                    sourceUri = source,
-                    startTimeSec = state.currentTimeSec,
-                    durationSec = 10f,
-                    volume = 1.0f
-                )
-            }
-            MediaType.VIDEO -> {
-                MediaOverlayItem(
-                    type = MediaType.VIDEO,
-                    title = asset.name,
-                    sourceUri = source,
-                    startTimeSec = state.currentTimeSec,
-                    durationSec = 6f,
-                    opacity = 0.9f,
-                    animation = MediaAnimationType.STATIC
-                )
-            }
-            else -> {
-                MediaOverlayItem(
-                    type = MediaType.PHOTO,
-                    title = asset.name,
-                    sourceUri = source,
-                    startTimeSec = state.currentTimeSec,
-                    durationSec = 4f,
-                    animation = MediaAnimationType.ZOOM_IN
-                )
-            }
-        }
-        _uiState.update { it.copy(mediaOverlays = it.mediaOverlays + newItem, selectedElementId = newItem.id) }
-    }
-
-    fun setShowSettingsDialog(show: Boolean) {
-        _uiState.update { it.copy(showSettingsDialog = show) }
-    }
-
-    private fun pushUndo() {
-        undoStack.push(_uiState.value.mediaOverlays)
-        redoStack.clear()
-        _uiState.update { it.copy(canUndo = undoStack.isNotEmpty(), canRedo = redoStack.isNotEmpty()) }
-    }
-
-    fun undo() {
-        if (undoStack.isNotEmpty()) {
-            val previous = undoStack.pop()
-            redoStack.push(_uiState.value.mediaOverlays)
-            _uiState.update {
-                it.copy(
-                    mediaOverlays = previous,
-                    canUndo = undoStack.isNotEmpty(),
-                    canRedo = redoStack.isNotEmpty()
-                )
-            }
-        }
-    }
-
-    fun redo() {
-        if (redoStack.isNotEmpty()) {
-            val next = redoStack.pop()
-            undoStack.push(_uiState.value.mediaOverlays)
-            _uiState.update {
-                it.copy(
-                    mediaOverlays = next,
-                    canUndo = undoStack.isNotEmpty(),
-                    canRedo = redoStack.isNotEmpty()
-                )
-            }
-        }
-    }
-
-    private fun observeVoiceoverService() {
-        viewModelScope.launch {
-            voiceoverService.isRecording.collectLatest { isRec ->
-                _uiState.update {
-                    it.copy(voiceoverState = it.voiceoverState.copy(isRecording = isRec))
-                }
-            }
-        }
-        viewModelScope.launch {
-            voiceoverService.recordingDurationSec.collectLatest { dur ->
-                _uiState.update {
-                    it.copy(voiceoverState = it.voiceoverState.copy(recordingDurationSec = dur))
-                }
-            }
-        }
-    }
-
-    fun selectTab(tab: StudioTab) {
-        _uiState.update { it.copy(activeTab = tab) }
-        if (tab == StudioTab.GALLERY) {
-            refreshGallery()
-        }
-    }
-
-    fun setSelectedElement(id: String?) {
-        _uiState.update { it.copy(selectedElementId = id) }
-    }
-
-    fun updateParam(key: String, value: String) {
-        _uiState.update {
-            val newMap = it.paramsMap.toMutableMap().apply { put(key, value) }
-            it.copy(paramsMap = newMap)
-        }
-    }
+    // --- Code IDE ---
 
     fun updateCustomCode(html: String, css: String, js: String) {
-        val detectedDuration = Regex("""data-duration=["']([0-9.]+)["']""").find(html)?.groupValues?.get(1)?.toFloatOrNull()
         _uiState.update {
-            val newDuration = detectedDuration ?: it.durationSec
-            val clampedTime = it.currentTimeSec.coerceAtMost(newDuration)
             it.copy(
                 customHtml = html,
                 customCss = css,
                 customJs = js,
-                isCustomCodeActive = true,
-                durationSec = newDuration,
-                currentTimeSec = clampedTime
+                isCustomCodeActive = true
             )
         }
     }
 
-    fun resetToTemplateCode() {
-        val current = _uiState.value.selectedTemplate
+    fun resetCustomCode() {
         _uiState.update {
             it.copy(
-                customHtml = current.htmlBody,
-                customCss = current.cssStyle,
-                customJs = current.jsScript,
-                isCustomCodeActive = false
+                isCustomCodeActive = false,
+                customHtml = "",
+                customCss = "",
+                customJs = ""
             )
         }
     }
 
-    fun setAspectRatio(ratio: AspectRatioType) {
-        _uiState.update { it.copy(aspectRatio = ratio) }
-    }
-
-    fun setResolution(resolution: RenderResolution) {
-        _uiState.update { it.copy(resolution = resolution) }
-    }
-
-    fun setFps(fps: Int) {
-        _uiState.update { it.copy(fps = fps) }
-    }
-
-    fun setDuration(durationSec: Float) {
-        _uiState.update {
-            val clamped = durationSec.coerceAtLeast(0.5f)
-            val clampedTime = it.currentTimeSec.coerceAtMost(clamped)
-            it.copy(durationSec = clamped, currentTimeSec = clampedTime)
-        }
-    }
-
-    fun setTimelineZoom(zoom: Float) {
-        _uiState.update { it.copy(timelineZoom = zoom.coerceIn(0.5f, 3.0f)) }
-    }
-
-    // --- Timeline Playback ---
-
-    fun togglePlay() {
-        if (_uiState.value.isPlaying) {
-            pause()
-        } else {
-            play()
-        }
-    }
-
-    fun play() {
-        playbackJob?.cancel()
-        _uiState.update { it.copy(isPlaying = true) }
-        
-        playbackJob = viewModelScope.launch {
-            val speed = _uiState.value.playbackSpeed
-            var initialTime = _uiState.value.currentTimeSec
-            if (initialTime >= _uiState.value.durationSec - 0.05f) {
-                initialTime = 0f
-            }
-
-            val startEpoch = System.currentTimeMillis() - ((initialTime / speed) * 1000L).toLong()
-
-            while (isActive && _uiState.value.isPlaying) {
-                val currentSpeed = _uiState.value.playbackSpeed
-                val elapsedSec = ((System.currentTimeMillis() - startEpoch) / 1000f) * currentSpeed
-                val duration = _uiState.value.durationSec
-
-                if (elapsedSec >= duration) {
-                    _uiState.update { it.copy(currentTimeSec = 0f) }
-                    play()
-                    break
-                } else {
-                    _uiState.update { it.copy(currentTimeSec = elapsedSec) }
-                }
-                delay(25)
-            }
-        }
-    }
-
-    fun pause() {
-        stopPlayback()
-    }
-
-    fun seekTo(timeSec: Float) {
-        val duration = _uiState.value.durationSec
-        val clamped = timeSec.coerceIn(0f, duration)
-        _uiState.update { it.copy(currentTimeSec = clamped) }
-    }
-
-    fun setPlaybackSpeed(speed: Float) {
-        val validSpeed = speed.coerceIn(0.25f, 4.0f)
-        _uiState.update { it.copy(playbackSpeed = validSpeed) }
-        if (_uiState.value.isPlaying) {
-            play()
-        }
-    }
-
-    fun stepFrame(deltaFrames: Int) {
-        val state = _uiState.value
-        val frameDuration = 1f / state.fps.toFloat()
-        val nextTime = (state.currentTimeSec + deltaFrames * frameDuration).coerceIn(0f, state.durationSec)
-        seekTo(nextTime)
-    }
-
-    fun jumpToScene(marker: SceneMarker) {
-        seekTo(marker.startSec)
-        _uiState.update {
-            it.copy(
-                activeSceneIndex = marker.index,
-                activeSceneId = marker.id,
-                activeSceneTitle = marker.title
-            )
-        }
-    }
-
-    private fun stopPlayback() {
-        playbackJob?.cancel()
-        playbackJob = null
-        _uiState.update { it.copy(isPlaying = false) }
-    }
-
-    // --- CapCut Clip & Track Editing Actions (Split, Trim, Delete, Duplicate) ---
-
-    fun splitSelectedClipAtPlayhead() {
-        val state = _uiState.value
-        val targetId = state.selectedElementId ?: return
-        val item = state.mediaOverlays.find { it.id == targetId } ?: return
-        val currentPlayhead = state.currentTimeSec
-
-        if (currentPlayhead > item.startTimeSec && currentPlayhead < item.endTimeSec) {
-            pushUndo()
-            val firstPartDuration = currentPlayhead - item.startTimeSec
-            val secondPartDuration = item.durationSec - firstPartDuration
-
-            val part1 = item.copy(durationSec = firstPartDuration)
-            val part2 = item.copy(
-                id = java.util.UUID.randomUUID().toString(),
-                startTimeSec = currentPlayhead,
-                durationSec = secondPartDuration
-            )
-
-            val updatedList = state.mediaOverlays.map { if (it.id == targetId) part1 else it } + part2
-            _uiState.update { it.copy(mediaOverlays = updatedList, selectedElementId = part2.id) }
-        }
-    }
-
-    fun deleteSelectedClip() {
-        val targetId = _uiState.value.selectedElementId ?: return
-        pushUndo()
-        _uiState.update { state ->
-            state.copy(
-                mediaOverlays = state.mediaOverlays.filterNot { it.id == targetId },
-                selectedElementId = null
-            )
-        }
-    }
-
-    fun duplicateSelectedClip() {
-        val targetId = _uiState.value.selectedElementId ?: return
-        val item = _uiState.value.mediaOverlays.find { it.id == targetId } ?: return
-        pushUndo()
-        val duplicated = item.copy(
-            id = java.util.UUID.randomUUID().toString(),
-            title = "${item.title} (Копия)",
-            startTimeSec = (item.startTimeSec + 0.5f).coerceAtMost(_uiState.value.durationSec - 1f)
-        )
-        _uiState.update { it.copy(mediaOverlays = it.mediaOverlays + duplicated, selectedElementId = duplicated.id) }
-    }
-
-    // --- CapCut Overlays (Photos, Videos, Text, Effects, Voiceover) ---
-
-    fun addTextOverlay(
-        text: String = "Новый текст",
-        colorHex: String = "#00F0FF",
-        fontSizeSp: Int = 28,
-        animation: MediaAnimationType = MediaAnimationType.ZOOM_IN
-    ) {
-        pushUndo()
-        val state = _uiState.value
-        val newItem = MediaOverlayItem(
-            type = MediaType.TEXT,
-            title = "Текст: $text",
-            textContent = text,
-            textColor = colorHex,
-            fontSizeSp = fontSizeSp,
-            startTimeSec = state.currentTimeSec,
-            durationSec = 3.5f,
-            xPercent = 50f,
-            yPercent = 50f,
-            animation = animation
-        )
-        _uiState.update { it.copy(mediaOverlays = it.mediaOverlays + newItem, selectedElementId = newItem.id) }
-    }
-
-    fun addEffectOverlay(effectType: VideoEffectType) {
-        pushUndo()
-        val state = _uiState.value
-        val newItem = MediaOverlayItem(
-            type = MediaType.EFFECT,
-            title = effectType.title.split("(").first().trim(),
-            effectType = effectType,
-            startTimeSec = state.currentTimeSec,
-            durationSec = 4f,
-            opacity = 0.8f
-        )
-        _uiState.update { it.copy(mediaOverlays = it.mediaOverlays + newItem, selectedElementId = newItem.id) }
-    }
-
-    fun addPhotoFromUri(uri: Uri, title: String = "Фото клип") {
-        viewModelScope.launch {
-            val dataUrl = MediaHelper.uriToDataUrl(context, uri, "image/png")
-            if (dataUrl != null) {
-                pushUndo()
-                val state = _uiState.value
-                val newItem = MediaOverlayItem(
-                    type = MediaType.PHOTO,
-                    title = title,
-                    sourceUri = dataUrl,
-                    startTimeSec = state.currentTimeSec,
-                    durationSec = 4f,
-                    animation = MediaAnimationType.ZOOM_IN
-                )
-                _uiState.update { it.copy(mediaOverlays = it.mediaOverlays + newItem, selectedElementId = newItem.id) }
-            }
-        }
-    }
-
-    fun addVideoFromUri(uri: Uri, title: String = "Видео футаж") {
-        viewModelScope.launch {
-            val savedFile = MediaHelper.copyUriToInternalFile(context, uri, "imported_videos", "vid", "mp4")
-            val source = savedFile?.toURI()?.toString() ?: uri.toString()
-            pushUndo()
-            val state = _uiState.value
-            val newItem = MediaOverlayItem(
-                type = MediaType.VIDEO,
-                title = title,
-                sourceUri = source,
-                startTimeSec = state.currentTimeSec,
-                durationSec = 6f,
-                opacity = 0.9f,
-                animation = MediaAnimationType.STATIC
-            )
-            _uiState.update { it.copy(mediaOverlays = it.mediaOverlays + newItem, selectedElementId = newItem.id) }
-        }
-    }
-
-    fun addAudioFromUri(uri: Uri, title: String = "Аудиодорожка", isVoiceover: Boolean = true) {
-        viewModelScope.launch {
-            val dataUrl = MediaHelper.uriToDataUrl(context, uri, "audio/mp3")
-            val source = dataUrl ?: uri.toString()
-            pushUndo()
-            val state = _uiState.value
-            val newItem = MediaOverlayItem(
-                type = if (isVoiceover) MediaType.VOICEOVER else MediaType.BGM,
-                title = title,
-                sourceUri = source,
-                startTimeSec = state.currentTimeSec,
-                durationSec = (state.durationSec - state.currentTimeSec).coerceAtLeast(2f),
-                volume = if (isVoiceover) state.voiceoverState.voiceoverVolume else state.voiceoverState.bgmVolume
-            )
-            _uiState.update { it.copy(mediaOverlays = it.mediaOverlays + newItem, selectedElementId = newItem.id) }
-        }
-    }
-
-    fun updateMediaOverlay(item: MediaOverlayItem) {
-        _uiState.update { state ->
-            val updatedList = state.mediaOverlays.map { if (it.id == item.id) item else it }
-            state.copy(mediaOverlays = updatedList)
-        }
-    }
-
-    fun removeMediaOverlay(id: String) {
-        pushUndo()
-        _uiState.update { state ->
-            state.copy(
-                mediaOverlays = state.mediaOverlays.filterNot { it.id == id },
-                selectedElementId = if (state.selectedElementId == id) null else state.selectedElementId
-            )
-        }
-    }
-
-    fun toggleMediaOverlayEnabled(id: String) {
-        _uiState.update { state ->
-            val updated = state.mediaOverlays.map {
-                if (it.id == id) it.copy(isEnabled = !it.isEnabled) else it
-            }
-            state.copy(mediaOverlays = updated)
-        }
-    }
-
-    // --- Voiceover Recording ---
-
-    fun startVoiceoverRecording() {
-        voiceoverService.startRecording(viewModelScope)
-    }
-
-    fun stopVoiceoverRecording() {
-        val file = voiceoverService.stopRecording()
-        if (file != null) {
-            pushUndo()
-            val dataUri = Uri.fromFile(file)
-            val dataUrl = MediaHelper.uriToDataUrl(context, dataUri, "audio/mp4") ?: file.toURI().toString()
-            val state = _uiState.value
-            val duration = _uiState.value.voiceoverState.recordingDurationSec.coerceAtLeast(1.5f)
-            val count = _uiState.value.mediaOverlays.count { it.type == MediaType.VOICEOVER } + 1
-            val newItem = MediaOverlayItem(
-                type = MediaType.VOICEOVER,
-                title = "Запись голоса #$count",
-                sourceUri = dataUrl,
-                startTimeSec = state.currentTimeSec,
-                durationSec = duration,
-                volume = _uiState.value.voiceoverState.voiceoverVolume
-            )
-            _uiState.update {
-                it.copy(
-                    mediaOverlays = it.mediaOverlays + newItem,
-                    voiceoverState = it.voiceoverState.copy(recordedAudioPath = file.absolutePath),
-                    selectedElementId = newItem.id
-                )
-            }
-        }
-    }
-
-    fun cancelVoiceoverRecording() {
-        voiceoverService.cancelRecording()
-    }
-
-    fun setVoiceoverVolume(vol: Float) {
-        _uiState.update {
-            it.copy(voiceoverState = it.voiceoverState.copy(voiceoverVolume = vol.coerceIn(0f, 2f)))
-        }
-    }
-
-    fun setBgmVolume(vol: Float) {
-        _uiState.update {
-            it.copy(voiceoverState = it.voiceoverState.copy(bgmVolume = vol.coerceIn(0f, 2f)))
-        }
-    }
-
-    fun toggleVoiceoverMute() {
-        _uiState.update {
-            it.copy(voiceoverState = it.voiceoverState.copy(isVoiceoverMuted = !it.voiceoverState.isVoiceoverMuted))
-        }
-    }
-
-    fun toggleBgmMute() {
-        _uiState.update {
-            it.copy(voiceoverState = it.voiceoverState.copy(isBgmMuted = !it.voiceoverState.isBgmMuted))
-        }
-    }
-
-    // --- JavaScriptInterface Callbacks ---
-
-    fun onJsTimelineReady(durationSec: Float, totalScenes: Int, sceneDataJson: String) {
-        val sceneList = mutableListOf<SceneMarker>()
-        try {
-            val array = JSONArray(sceneDataJson)
-            for (i in 0 until array.length()) {
-                val obj = array.getJSONObject(i)
-                sceneList.add(
-                    SceneMarker(
-                        index = obj.optInt("index", i),
-                        id = obj.optString("id", "scene-$i"),
-                        title = obj.optString("title", "Scene ${i + 1}"),
-                        startSec = obj.optDouble("startSec", (i * 4).toDouble()).toFloat(),
-                        durationSec = obj.optDouble("durationSec", 4.0).toFloat()
-                    )
-                )
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Error parsing scenes: ${e.message}")
-        }
-
-        _uiState.update { state ->
-            state.copy(
-                sceneMarkers = if (sceneList.isNotEmpty()) sceneList else state.sceneMarkers
-            )
-        }
-    }
-
-    fun onJsTick(currentTimeSec: Float, progress: Float, isPlaying: Boolean) {}
-
-    fun onJsSceneChange(sceneIndex: Int, sceneId: String, sceneTitle: String) {
-        _uiState.update {
-            it.copy(
-                activeSceneIndex = sceneIndex,
-                activeSceneId = sceneId,
-                activeSceneTitle = sceneTitle
-            )
-        }
-    }
-
-    // --- Rendering ---
+    // --- Render & Export ---
 
     fun startRender() {
-        stopPlayback()
+        pause()
         val state = _uiState.value
+        val compiledHtml = getCompiledHtmlForPreview()
 
         val config = RenderConfiguration(
-            templateId = state.selectedTemplate.id,
-            durationSec = state.durationSec,
-            fps = state.fps,
-            resolution = state.resolution,
-            aspectRatio = state.aspectRatio,
-            customHtml = if (state.isCustomCodeActive) state.customHtml else null,
-            customCss = if (state.isCustomCodeActive) state.customCss else null,
-            customJs = if (state.isCustomCodeActive) state.customJs else null,
-            paramsMap = state.paramsMap,
-            mediaOverlays = state.mediaOverlays,
-            voiceoverState = state.voiceoverState
+            templateId = state.project.id,
+            durationSec = state.totalDurationSec,
+            fps = state.project.fps,
+            resolution = state.project.resolution,
+            aspectRatio = state.project.aspectRatio,
+            customHtml = compiledHtml,
+            customCss = "",
+            customJs = "",
+            paramsMap = emptyMap(),
+            mediaOverlays = emptyList()
+        )
+
+        val template = VideoTemplate(
+            id = state.project.id,
+            name = state.project.name,
+            category = "HyperFrames Studio",
+            description = "Hardware encoded multi-scene project",
+            defaultDurationSec = state.totalDurationSec,
+            defaultFps = state.project.fps,
+            defaultAspectRatio = state.project.aspectRatio,
+            params = emptyList(),
+            htmlBody = compiledHtml,
+            cssStyle = "",
+            jsScript = ""
         )
 
         _uiState.update { it.copy(showRenderDialog = true, renderState = RenderState.Idle) }
 
         renderJob?.cancel()
         renderJob = viewModelScope.launch {
-            engine.renderVideo(state.selectedTemplate, config).collectLatest { status ->
+            engine.renderVideo(template, config).collectLatest { status ->
                 _uiState.update { it.copy(renderState = status) }
                 if (status is RenderState.Completed) {
                     refreshGallery()
@@ -803,29 +790,19 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun setShowExplainer(show: Boolean) {
-        _uiState.update { it.copy(showExplainerDialog = show) }
-    }
+    // --- HTML Compilation ---
 
     fun getCompiledHtmlForPreview(): String {
         val state = _uiState.value
-        val template = if (state.isCustomCodeActive) {
-            state.selectedTemplate.copy(
-                htmlBody = state.customHtml,
-                cssStyle = state.customCss,
-                jsScript = state.customJs
-            )
-        } else {
-            state.selectedTemplate
+        if (state.isCustomCodeActive && state.customHtml.isNotBlank()) {
+            return state.customHtml
         }
 
-        return template.compileFullHtml(
-            paramsMap = state.paramsMap,
+        return ProjectHtmlCompiler.compile(
+            project = state.project,
             currentTimeSec = state.currentTimeSec,
-            durationSec = state.durationSec,
-            isLivePlaying = state.isPlaying,
-            mediaOverlays = state.mediaOverlays,
-            voiceoverState = state.voiceoverState
+            isPlaying = state.isPlaying,
+            activeSceneId = state.activeSceneId
         )
     }
 }

@@ -2,80 +2,97 @@ package com.saalpa.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// CapCut Dark Pro Video Editor Palette
-val CapCutBg = Color(0xFF0D0D11)
-val CapCutSurface = Color(0xFF18181F)
-val CapCutSurfaceVariant = Color(0xFF22222C)
-val CapCutTrackBg = Color(0xFF1C1C24)
-val CapCutTrackHeader = Color(0xFF14141A)
-val CapCutCardBorder = Color(0xFF2E2E3C)
-val CapCutCardBorderSubtle = Color(0xFF3D3D4E)
+// HyperFrames Professional Studio Dark Palette (HeyGen / Modern Creative Studio)
+val StudioBg = Color(0xFF0C0E14)                // Dark neutral background
+val StudioSurface = Color(0xFF131722)           // Matte surface for panels & inspector
+val StudioSurfaceVariant = Color(0xFF1B202E)    // Surface for cards, controls, inputs
+val StudioSurfaceElevated = Color(0xFF232A3B)   // Floating toolbars, active scenes
+val StudioBorder = Color(0xFF283042)            // Crisp, subtle 1px borders
+val StudioBorderSubtle = Color(0xFF38435C)      // Divider lines
 
-// Signature CapCut Cyan & Accents
-val CapCutCyan = Color(0xFF00E5FF)          // Iconic CapCut Action Cyan
-val CapCutCyanDim = Color(0xFF00A2B3)
-val CapCutCyanContainer = Color(0xFF00363D)
-val OnCapCutCyan = Color(0xFF001F24)
+// Signature Creative Studio Accents (HeyGen Indigo / Violet)
+val StudioAccent = Color(0xFF6366F1)            // Indigo Primary Brand Action
+val StudioAccentLight = Color(0xFF818CF8)       // Highlight / Hover
+val StudioAccentContainer = Color(0xFF312E81)  // Dark Indigo Container
+val OnStudioAccent = Color(0xFFFFFFFF)
 
-val CapCutGreen = Color(0xFF00E676)         // Audio / Voiceover Tracks
-val CapCutYellow = Color(0xFFFFD600)        // Text / Subtitle Tracks
-val CapCutPink = Color(0xFFFF2A6D)          // Effects & Animations
-val CapCutBlue = Color(0xFF2979FF)          // Video Tracks
-val CapCutOrange = Color(0xFFFF6D00)        // Keyframes & Markers
+// Secondary Functional Accents
+val StudioSuccess = Color(0xFF10B981)           // Green (Rendering done, audio ready)
+val StudioWarning = Color(0xFFF59E0B)           // Amber (Script timing, keyframe)
+val StudioDanger = Color(0xFFEF4444)            // Rose/Red (Delete, Nerf, Alert)
+val StudioSky = Color(0xFF0EA5E9)               // Sky blue (Media assets, video clips)
+val StudioPurple = Color(0xFFA855F7)            // Purple (Avatar / Voice)
 
-// Backwards-compatible aliases
-val StudioDarkBg = CapCutBg
-val StudioSurface = CapCutSurface
-val StudioSurfaceVariant = CapCutSurfaceVariant
-val StudioCardBorder = CapCutCardBorder
-val StudioCardBorderSubtle = CapCutCardBorderSubtle
+// High-contrast Dark UI Typography
+val StudioTextPrimary = Color(0xFFF8FAFC)
+val StudioTextSecondary = Color(0xFF94A3B8)
+val StudioTextMuted = Color(0xFF64748B)
 
-val ElectricCyan = CapCutCyan
-val PrimaryBrand = CapCutCyan
-val PrimaryBrandContainer = CapCutCyanContainer
-val OnPrimaryBrand = OnCapCutCyan
-val OnPrimaryBrandContainer = Color(0xFF80F2FF)
+// Canvas Viewport Background
+val ViewportDarkBg = Color(0xFF07080B)
+val ViewportBorder = Color(0xFF1F2433)
 
-val NeonViolet = Color(0xFF9D4EDD)
-val CyberPink = CapCutPink
-val EmeraldGreen = CapCutGreen
-val AmberGlow = CapCutYellow
-
-// Preview Viewport Dark Background (for high contrast video canvas)
-val ViewportDarkBg = Color(0xFF08080A)
-val ViewportBorder = Color(0xFF1E1E28)
-
-// Window Dots
+// Studio Traffic Light Dots
 val WindowDotRed = Color(0xFFFF5F56)
 val WindowDotYellow = Color(0xFFFFBD2E)
 val WindowDotGreen = Color(0xFF27C93F)
 
-// Typography Palette (High-contrast Dark UI)
-val TextPrimary = Color(0xFFF6F6FA)
-val TextSecondary = Color(0xFFA6A6BA)
-val TextMuted = Color(0xFF6E6E85)
+// Backwards compatibility mappings for older components during migration
+val StudioDarkBg = StudioBg
+val StudioCardBorder = StudioBorder
+val StudioCardBorderSubtle = StudioBorderSubtle
+val ElectricCyan = StudioAccentLight
+val PrimaryBrand = StudioAccent
+val PrimaryBrandContainer = StudioAccentContainer
+val OnPrimaryBrand = OnStudioAccent
+val TextPrimary = StudioTextPrimary
+val TextSecondary = StudioTextSecondary
+val TextMuted = StudioTextMuted
 
-// Material 3 Color Scheme Definitions
-val PrimaryDark = CapCutCyan
-val OnPrimaryDark = Color(0xFF00363D)
-val PrimaryContainerDark = CapCutCyanContainer
-val OnPrimaryContainerDark = Color(0xFF80F2FF)
+// CapCut legacy aliases for zero compilation breaks during transition
+val CapCutBg = StudioBg
+val CapCutSurface = StudioSurface
+val CapCutSurfaceVariant = StudioSurfaceVariant
+val CapCutTrackBg = StudioSurfaceVariant
+val CapCutTrackHeader = StudioSurface
+val CapCutCardBorder = StudioBorder
+val CapCutCardBorderSubtle = StudioBorderSubtle
+val CapCutCyan = StudioAccentLight
+val CapCutCyanDim = StudioAccent
+val CapCutCyanContainer = StudioAccentContainer
+val OnCapCutCyan = OnStudioAccent
+val CapCutGreen = StudioSuccess
+val CapCutYellow = StudioWarning
+val CapCutPink = StudioDanger
+val CapCutBlue = StudioSky
+val CapCutOrange = StudioWarning
+val CyberPink = Color(0xFFFF2A85)
+val EmeraldGreen = StudioSuccess
+val NeonViolet = StudioPurple
+val AmberGlow = StudioWarning
+val StudioPink = Color(0xFFEC4899)
 
-val SecondaryDark = Color(0xFFBCC7D6)
-val OnSecondaryDark = Color(0xFF26313D)
-val SecondaryContainerDark = Color(0xFF3D4754)
-val OnSecondaryContainerDark = Color(0xFFD8E3F2)
+// Material 3 Color Scheme
+val PrimaryDark = StudioAccent
+val OnPrimaryDark = OnStudioAccent
+val PrimaryContainerDark = StudioAccentContainer
+val OnPrimaryContainerDark = Color(0xFFE0E7FF)
 
-val TertiaryDark = CapCutPink
-val OnTertiaryDark = Color(0xFF5E001F)
-val TertiaryContainerDark = Color(0xFF8B0032)
-val OnTertiaryContainerDark = Color(0xFFFFD9E2)
+val SecondaryDark = Color(0xFF94A3B8)
+val OnSecondaryDark = Color(0xFF0F172A)
+val SecondaryContainerDark = StudioSurfaceVariant
+val OnSecondaryContainerDark = Color(0xFFF1F5F9)
 
-val BackgroundDark = CapCutBg
-val OnBackgroundDark = Color(0xFFF6F6FA)
-val SurfaceDark = CapCutSurface
-val OnSurfaceDark = Color(0xFFF6F6FA)
-val SurfaceVariantDark = CapCutSurfaceVariant
-val OnSurfaceVariantDark = Color(0xFFA6A6BA)
-val OutlineDark = CapCutCardBorder
-val OutlineVariantDark = CapCutCardBorderSubtle
+val TertiaryDark = StudioPurple
+val OnTertiaryDark = Color(0xFFFFFFFF)
+val TertiaryContainerDark = Color(0xFF581C87)
+val OnTertiaryContainerDark = Color(0xFFF3E8FF)
+
+val BackgroundDark = StudioBg
+val OnBackgroundDark = StudioTextPrimary
+val SurfaceDark = StudioSurface
+val OnSurfaceDark = StudioTextPrimary
+val SurfaceVariantDark = StudioSurfaceVariant
+val OnSurfaceVariantDark = StudioTextSecondary
+val OutlineDark = StudioBorder
+val OutlineVariantDark = StudioBorderSubtle

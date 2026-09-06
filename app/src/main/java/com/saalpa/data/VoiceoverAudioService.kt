@@ -123,6 +123,13 @@ class VoiceoverAudioService(private val context: Context) {
         currentRecordingFile = null
     }
 
+    fun playAudio(filePath: String) {
+        val file = File(filePath)
+        if (file.exists()) {
+            playPreview(Uri.fromFile(file))
+        }
+    }
+
     fun playPreview(audioUri: Uri, onComplete: () -> Unit = {}) {
         stopPreview()
         try {

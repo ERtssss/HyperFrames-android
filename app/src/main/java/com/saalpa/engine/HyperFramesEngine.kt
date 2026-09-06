@@ -46,7 +46,9 @@ class HyperFramesEngine(private val context: Context) {
 
         try {
             // Compile HTML with custom or template code
-            val compiledHtml = if (config.customHtml != null && config.customCss != null && config.customJs != null) {
+            val compiledHtml = if (config.customHtml != null && config.customHtml.contains("<!DOCTYPE html>")) {
+                config.customHtml
+            } else if (config.customHtml != null && config.customCss != null && config.customJs != null) {
                 // User custom code mode
                 val customTemplate = template.copy(
                     htmlBody = config.customHtml,
