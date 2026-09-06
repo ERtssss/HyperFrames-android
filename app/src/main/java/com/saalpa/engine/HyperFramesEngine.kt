@@ -57,14 +57,18 @@ class HyperFramesEngine(private val context: Context) {
                     paramsMap = config.paramsMap,
                     currentTimeSec = 0f,
                     durationSec = durationSec,
-                    isLivePlaying = false
+                    isLivePlaying = false,
+                    mediaOverlays = config.mediaOverlays,
+                    voiceoverState = config.voiceoverState
                 )
             } else {
                 template.compileFullHtml(
                     paramsMap = config.paramsMap,
                     currentTimeSec = 0f,
                     durationSec = durationSec,
-                    isLivePlaying = false
+                    isLivePlaying = false,
+                    mediaOverlays = config.mediaOverlays,
+                    voiceoverState = config.voiceoverState
                 )
             }
 

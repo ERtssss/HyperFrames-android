@@ -266,11 +266,11 @@ fun RenderSettingsDialog(
                                     color = PrimaryBrand
                                 )
                             }
+                            val maxRange = if (durationSec > 10f) (durationSec + 5f).coerceAtLeast(30f) else 15f
                             Slider(
-                                value = durationSec,
+                                value = durationSec.coerceIn(1f, 60f),
                                 onValueChange = onDurationChange,
-                                valueRange = 1f..10f,
-                                steps = 17, // 0.5s steps
+                                valueRange = 1f..maxRange.coerceAtMost(60f),
                                 colors = SliderDefaults.colors(
                                     thumbColor = PrimaryBrand,
                                     activeTrackColor = PrimaryBrand,

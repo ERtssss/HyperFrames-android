@@ -38,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.saalpa.engine.HyperFramesJsBridge
 import com.saalpa.model.AspectRatioType
 import com.saalpa.ui.theme.ElectricCyan
 import com.saalpa.ui.theme.StudioCardBorder
@@ -54,7 +55,8 @@ fun WebViewPreview(
     progress: Float,
     isPlaying: Boolean,
     aspectRatio: AspectRatioType,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    jsBridge: HyperFramesJsBridge? = null
 ) {
     val context = LocalContext.current
     val webView = remember {
@@ -71,8 +73,13 @@ fun WebViewPreview(
                 allowFileAccess = true
                 loadWithOverviewMode = true
                 useWideViewPort = true
+                mediaPlaybackRequiresUserGesture = false
                 mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                 cacheMode = WebSettings.LOAD_NO_CACHE
+            }
+            if (jsBridge != null) {
+                addJavascriptInterface(jsBridge, "AndroidHyperFrames")
+                addJavascriptInterface(jsBridge, "AndroidBridge")
             }
             webViewClient = WebViewClient()
         }
@@ -86,9 +93,19 @@ fun WebViewPreview(
     // Sync timeline position smoothly with JavaScript
     LaunchedEffect(currentTimeSec, progress, isPlaying) {
         val jsCode = """
-            if (window.HyperFrames && window.HyperFrames.seek) {
-                window.HyperFrames.seek($currentTimeSec, $progress);
+            if (window.__hfSeek) {
+                window.__hfSeek($currentTimeSec, $progress);
             } else {
+                if (window.__timelines) {
+                    for (var k in window.__timelines) {
+                        if (window.__timelines[k] && typeof window.__timelines[k].seek === 'function') {
+                            window.__timelines[k].seek($currentTimeSec, false);
+                        }
+                    }
+                }
+                if (typeof window.seekTo === 'function') window.seekTo($currentTimeSec);
+                if (window.gsap && window.gsap.globalTimeline) window.gsap.globalTimeline.seek($currentTimeSec, false);
+                if (window.HyperFrames && window.HyperFrames.seek) window.HyperFrames.seek($currentTimeSec, $progress);
                 document.documentElement.style.setProperty('--time', '${currentTimeSec}s');
                 document.documentElement.style.setProperty('--progress', '$progress');
             }
@@ -111,78 +128,15 @@ fun WebViewPreview(
     }
 
     Box(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+        modifier = modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
-        Column(
+        AndroidView(
+            factory = { webView },
             modifier = Modifier
-                .aspectRatio(ratioFloat, matchHeightConstraintsFirst = true)
-                .shadow(12.dp, RoundedCornerShape(18.dp), spotColor = ElectricCyan.copy(alpha = 0.15f))
-                .clip(RoundedCornerShape(18.dp))
-                .background(ViewportDarkBg)
-                .border(1.5.dp, ViewportBorder, RoundedCornerShape(18.dp))
+                .fillMaxSize()
                 .testTag("preview_viewport")
-        ) {
-            // Sleek Preview Window Header
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(androidx.compose.ui.graphics.Color(0xFF1E1B24))
-                    .padding(horizontal = 10.dp, vertical = 5.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Window Control Dots
-                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    Box(modifier = Modifier.size(7.dp).clip(CircleShape).background(WindowDotRed))
-                    Box(modifier = Modifier.size(7.dp).clip(CircleShape).background(WindowDotYellow))
-                    Box(modifier = Modifier.size(7.dp).clip(CircleShape).background(WindowDotGreen))
-                }
-
-                // Aspect Ratio Label
-                Text(
-                    text = "CANVAS · ${aspectRatio.title.split(" ").first()}",
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace,
-                    letterSpacing = 0.8.sp,
-                    color = androidx.compose.ui.graphics.Color(0xFFCAC4D0)
-                )
-
-                // Live Indicator
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(6.dp)
-                            .clip(CircleShape)
-                            .background(if (isPlaying) WindowDotGreen else WindowDotYellow)
-                    )
-                    Text(
-                        text = if (isPlaying) "PLAYING" else "PAUSED",
-                        fontSize = 8.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (isPlaying) WindowDotGreen else androidx.compose.ui.graphics.Color(0xFF938F99)
-                    )
-                }
-            }
-
-            // Webview Display Canvas
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-            ) {
-                AndroidView(
-                    factory = { webView },
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-        }
+        )
     }
 }
 

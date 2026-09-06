@@ -27,8 +27,13 @@ class ExampleRobolectricTest {
   fun `verify templates repository`() {
     val templates = TemplateRepository.templates
     assertTrue(templates.isNotEmpty())
-    val kinetic = templates.first()
-    assertNotNull(kinetic.compileFullHtml(emptyMap(), 0f, 3.5f))
+    val mlbb = templates.first { it.id == "mlbb_patch_update" }
+    assertNotNull(mlbb)
+    val compiled = mlbb.compileFullHtml(emptyMap(), 5.0f, 25.0f)
+    assertTrue(compiled.contains("hyperframes-bridge"))
+    assertTrue(compiled.contains("window.__hfSeek"))
+    assertTrue(compiled.contains("window.__timelines"))
+    assertTrue(compiled.contains("MOBILE LEGENDS"))
   }
 }
 

@@ -8,7 +8,264 @@ import com.saalpa.model.VideoTemplate
 object TemplateRepository {
 
     val templates: List<VideoTemplate> = listOf(
-        // 1. Kinetic Typography
+        // 1. MLBB Patch Update (HeyGen HyperFrames GSAP)
+        VideoTemplate(
+            id = "mlbb_patch_update",
+            name = "MLBB Patch Update",
+            category = "Gaming & Esports",
+            description = "Multi-scene GSAP timeline patch breakdown with hero buffs, nerfs, and call-to-actions.",
+            defaultDurationSec = 25.0f,
+            defaultFps = 30,
+            defaultAspectRatio = AspectRatioType.PORTRAIT_9_16,
+            params = listOf(
+                TemplateParam("GAME_TITLE", "Game Title", "MOBILE LEGENDS"),
+                TemplateParam("PATCH_TAG", "Patch Date", "Патч от 25.08"),
+                TemplateParam("HERO_BUFF", "Buffed Hero", "ХАЯБУСА"),
+                TemplateParam("HERO_REWORK", "Reworked Hero", "ОБСИДИЯ"),
+                TemplateParam("HERO_NERF", "Nerfed Hero", "ХАНЗО & АТЛАС")
+            ),
+            htmlBody = """
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>MLBB Patch Update</title>
+  <!-- GSAP for frame-exact HyperFrames rendering -->
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;900&display=swap" rel="stylesheet">
+  <style>
+    * { 
+      box-sizing: border-box; 
+      margin: 0; 
+      padding: 0; 
+    }
+    
+    body {
+      font-family: 'Montserrat', sans-serif;
+      background: #000;
+      color: #ffffff;
+      overflow: hidden;
+    }
+
+    #root {
+      position: relative;
+      width: 1080px;
+      height: 1920px;
+      background: radial-gradient(circle at 50% 30%, #162038 0%, #06080e 100%);
+      overflow: hidden;
+    }
+
+    .glow {
+      position: absolute;
+      width: 700px;
+      height: 700px;
+      border-radius: 50%;
+      filter: blur(150px);
+      opacity: 0.3;
+      pointer-events: none;
+    }
+    .glow-blue { background: #2563eb; top: 10%; left: 15%; }
+    .glow-red { background: #dc2626; bottom: 15%; right: 10%; }
+
+    .scene {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 70px;
+      opacity: 0;
+      visibility: hidden;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 14px 34px;
+      border-radius: 50px;
+      font-size: 28px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      margin-bottom: 30px;
+    }
+    .badge.buff { background: rgba(34, 197, 94, 0.2); border: 2px solid #22c55e; color: #4ade80; }
+    .badge.nerf { background: rgba(239, 68, 68, 0.2); border: 2px solid #ef4444; color: #f87171; }
+    .badge.adj { background: rgba(234, 179, 8, 0.2); border: 2px solid #eab308; color: #facc15; }
+
+    h1 {
+      font-size: 76px;
+      text-align: center;
+      text-transform: uppercase;
+      line-height: 1.1;
+      margin-bottom: 25px;
+      text-shadow: 0 10px 30px rgba(0,0,0,0.8);
+    }
+    .hero-name {
+      font-size: 80px;
+      text-align: center;
+      color: #60a5fa;
+      margin-bottom: 35px;
+      text-transform: uppercase;
+    }
+
+    .card {
+      background: rgba(255, 255, 255, 0.08);
+      border: 2px solid rgba(255, 255, 255, 0.18);
+      backdrop-filter: blur(12px);
+      border-radius: 28px;
+      padding: 36px;
+      width: 100%;
+      margin-bottom: 24px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+    }
+    .card-title {
+      font-size: 34px;
+      font-weight: 900;
+      color: #93c5fd;
+      margin-bottom: 14px;
+    }
+    .card-text {
+      font-size: 30px;
+      color: #f1f5f9;
+      line-height: 1.45;
+    }
+    .diff-old { color: #f87171; text-decoration: line-through; margin-right: 10px; }
+    .diff-new { color: #4ade80; font-weight: 900; }
+  </style>
+</head>
+<body>
+
+  <div id="root" data-composition-id="main" data-start="0" data-duration="25" data-width="1080" data-height="1920">
+    <div class="glow glow-blue"></div>
+    <div class="glow glow-red"></div>
+
+    <!-- Сцена 1: 0 - 4 сек -->
+    <div id="scene-1" class="scene clip" data-track-index="1" data-start="0" data-duration="4">
+      <div class="badge adj">{{PATCH_TAG}}</div>
+      <h1>{{GAME_TITLE}}</h1>
+      <p style="font-size: 40px; color: #94a3b8; text-align: center; margin-top: 20px; line-height: 1.3;">
+        Глобальное обновление героев и меты
+      </p>
+    </div>
+
+    <!-- Сцена 2: 4 - 9 сек -->
+    <div id="scene-2" class="scene clip" data-track-index="1" data-start="4" data-duration="5">
+      <div class="badge buff">УСИЛЕНИЕ (↑)</div>
+      <h2 class="hero-name">{{HERO_BUFF}}</h2>
+      
+      <div class="card">
+        <div class="card-title">1-й Навык (Урон)</div>
+        <div class="card-text">
+          Доп. урон: <span class="diff-old">75%</span> ➔ <span class="diff-new">75%–85% физ. атаки</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">2-й Навык (Комфорт)</div>
+        <div class="card-text">
+          Хитбокс тени: <span class="diff-new">0.8 ➔ 1.0</span><br>
+          Увеличена скорость прицела
+        </div>
+      </div>
+    </div>
+
+    <!-- Сцена 3: 9 - 14 сек -->
+    <div id="scene-3" class="scene clip" data-track-index="1" data-start="9" data-duration="5">
+      <div class="badge buff">РЕВОРК УЛЬТЫ (↑)</div>
+      <h2 class="hero-name" style="color: #c084fc;">{{HERO_REWORK}}</h2>
+      
+      <div class="card">
+        <div class="card-title">Ультимейт (Выживаемость)</div>
+        <div class="card-text">
+          Вместо скорости атаки дает <span class="diff-new">ЩИТ 200 (+25 за осколок)</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Пассивка & Скорость</div>
+        <div class="card-text">
+          • Удары по башням дают <span class="diff-new">+2 энергии</span><br>
+          • Прирост ск. атаки: <span class="diff-old">1%</span> ➔ <span class="diff-new">1.5%</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Сцена 4: 14 - 19 сек -->
+    <div id="scene-4" class="scene clip" data-track-index="1" data-start="14" data-duration="5">
+      <div class="badge nerf">БАЛАНС & НЕРФ</div>
+      <h2 class="hero-name" style="font-size: 68px; color: #fbbf24;">{{HERO_NERF}}</h2>
+      
+      <div class="card">
+        <div class="card-title">Ханзо — Нерф танка (~)</div>
+        <div class="card-text">
+          Отхил зависит от <span class="diff-new">физ. атаки</span>, а не от % максимального HP.
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Атлас — Нерф роума (↓)</div>
+        <div class="card-text">
+          Ск. бега (Навык 2): <span class="diff-old">40%</span> ➔ <span class="diff-new">30%</span><br>
+          КД увеличено на +1 сек.
+        </div>
+      </div>
+    </div>
+
+    <!-- Сцена 5: 19 - 22 сек -->
+    <div id="scene-5" class="scene clip" data-track-index="1" data-start="19" data-duration="3">
+      <div class="badge nerf">НЕРФ ПРЕДМЕТА (↓)</div>
+      <h2 class="hero-name" style="color: #f87171; font-size: 60px;">ШТОРМОВОЙ ПОЯС</h2>
+      
+      <div class="card">
+        <div class="card-title">Ограничение ролей</div>
+        <div class="card-text">
+          Снижение эффекта на 50% теперь действует не только на стрелков/магов, но и на <span class="diff-old">УБИЙЦ</span>.
+        </div>
+      </div>
+    </div>
+
+    <!-- Сцена 6: 22 - 25 сек -->
+    <div id="scene-6" class="scene clip" data-track-index="1" data-start="22" data-duration="3">
+      <h1>КАК ВАМ ПАТЧ?</h1>
+      <p style="font-size: 36px; color: #94a3b8; text-align: center; margin: 35px 0;">
+        Кого теперь банить в рейтинге? Пиши в комментариях!
+      </p>
+      <div class="badge buff">ПОДПИШИСЬ НА КАНАЛ</div>
+    </div>
+  </div>
+
+  <!-- Таймлайн HyperFrames -->
+  <script>
+    window.__timelines = window.__timelines || {};
+    const tl = gsap.timeline({ paused: true });
+
+    function registerScene(selector, startTime, endTime) {
+      tl.fromTo(selector, 
+        { autoAlpha: 0, scale: 0.95, y: 30 }, 
+        { autoAlpha: 1, scale: 1, y: 0, duration: 0.35, ease: "power2.out" }, 
+        startTime
+      );
+      tl.to(selector, 
+        { autoAlpha: 0, scale: 1.05, duration: 0.3, ease: "power2.in" }, 
+        endTime - 0.3
+      );
+    }
+
+    registerScene("#scene-1", 0, 4);
+    registerScene("#scene-2", 4, 9);
+    registerScene("#scene-3", 9, 14);
+    registerScene("#scene-4", 14, 19);
+    registerScene("#scene-5", 19, 22);
+    registerScene("#scene-6", 22, 25);
+
+    window.__timelines.main = tl;
+  </script>
+</body>
+</html>
+            """.trimIndent(),
+            cssStyle = "",
+            jsScript = ""
+        ),
+
+        // 2. Kinetic Typography
         VideoTemplate(
             id = "kinetic_typography",
             name = "Kinetic Typography",

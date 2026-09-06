@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -20,19 +22,17 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Redo
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Code
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.filled.IosShare
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -44,35 +44,35 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.saalpa.ui.components.ArchitectureExplainerModal
+import com.saalpa.ui.components.AudioDrawer
+import com.saalpa.ui.components.CapCutBottomToolbar
+import com.saalpa.ui.components.CapCutMultiTrackTimeline
 import com.saalpa.ui.components.CodeEditor
+import com.saalpa.ui.components.EditDrawer
+import com.saalpa.ui.components.EffectsDrawer
 import com.saalpa.ui.components.ExportProgressModal
 import com.saalpa.ui.components.GalleryView
-import com.saalpa.ui.components.QuickCustomizer
-import com.saalpa.ui.components.RenderSettingsDialog
-import com.saalpa.ui.components.TemplateSelector
-import com.saalpa.ui.components.TimelineBar
+import com.saalpa.ui.components.OverlayDrawer
+import com.saalpa.ui.components.RatioDrawer
+import com.saalpa.ui.components.TextDrawer
 import com.saalpa.ui.components.WebViewPreview
-import com.saalpa.ui.theme.CyberPink
-import com.saalpa.ui.theme.ElectricCyan
-import com.saalpa.ui.theme.EmeraldGreen
-import com.saalpa.ui.theme.NeonViolet
-import com.saalpa.ui.theme.OnPrimaryBrand
-import com.saalpa.ui.theme.PrimaryBrand
-import com.saalpa.ui.theme.PrimaryBrandContainer
-import com.saalpa.ui.theme.StudioCardBorder
-import com.saalpa.ui.theme.StudioCardBorderSubtle
-import com.saalpa.ui.theme.StudioDarkBg
-import com.saalpa.ui.theme.StudioSurface
-import com.saalpa.ui.theme.StudioSurfaceVariant
+import com.saalpa.ui.theme.CapCutBg
+import com.saalpa.ui.theme.CapCutCardBorder
+import com.saalpa.ui.theme.CapCutCyan
+import com.saalpa.ui.theme.CapCutSurface
+import com.saalpa.ui.theme.CapCutSurfaceVariant
+import com.saalpa.ui.theme.OnCapCutCyan
 import com.saalpa.ui.theme.TextMuted
 import com.saalpa.ui.theme.TextPrimary
 import com.saalpa.ui.theme.TextSecondary
+import com.saalpa.ui.theme.ViewportDarkBg
+import java.util.Locale
 
 @Composable
 fun StudioScreen(
@@ -81,20 +81,23 @@ fun StudioScreen(
     val uiState by viewModel.uiState.collectAsState()
 
     Scaffold(
-        containerColor = StudioDarkBg,
+        containerColor = CapCutBg,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            StudioTopBar(
-                aspectRatioText = uiState.aspectRatio.title.split(" ").first(),
-                onExplainerClick = { viewModel.setShowExplainer(true) },
-                onRenderClick = { viewModel.startRender() }
+            CapCutTopBar(
+                state = uiState,
+                onUndo = { viewModel.undo() },
+                onRedo = { viewModel.redo() },
+                onOpenRatio = { viewModel.selectTab(StudioTab.RATIO) },
+                onOpenInfo = { viewModel.setShowExplainer(true) },
+                onExportClick = { viewModel.startRender() }
             )
         },
         bottomBar = {
-            StudioBottomNav(
+            CapCutBottomToolbar(
                 activeTab = uiState.activeTab,
-                onSelectTab = { viewModel.selectTab(it) },
-                galleryCount = uiState.savedVideos.size
+                onTabSelected = { viewModel.selectTab(it) },
+                modifier = Modifier.navigationBarsPadding()
             )
         }
     ) { innerPadding ->
@@ -102,89 +105,161 @@ fun StudioScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                .background(CapCutBg)
         ) {
-            // Main Live Viewport Area
+            // 1. CapCut Center Video Viewport
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f)
+                    .weight(1.05f)
+                    .background(ViewportDarkBg),
+                contentAlignment = Alignment.Center
             ) {
-                WebViewPreview(
-                    compiledHtml = viewModel.getCompiledHtmlForPreview(),
-                    currentTimeSec = uiState.currentTimeSec,
-                    progress = uiState.progress,
-                    isPlaying = uiState.isPlaying,
-                    aspectRatio = uiState.aspectRatio
-                )
+                // Aspect-ratio bounded video frame
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .padding(vertical = 4.dp, horizontal = 12.dp)
+                        .aspectRatio(uiState.aspectRatio.ratio)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color.Black)
+                        .border(1.dp, CapCutCardBorder, RoundedCornerShape(10.dp))
+                        .shadow(12.dp)
+                ) {
+                    WebViewPreview(
+                        compiledHtml = viewModel.getCompiledHtmlForPreview(),
+                        currentTimeSec = uiState.currentTimeSec,
+                        progress = uiState.progress,
+                        isPlaying = uiState.isPlaying,
+                        aspectRatio = uiState.aspectRatio,
+                        jsBridge = viewModel.jsBridge,
+                        modifier = Modifier.fillMaxSize()
+                    )
+
+                    // Video Timecode Badge Overlay
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(8.dp),
+                        shape = RoundedCornerShape(6.dp),
+                        color = Color.Black.copy(alpha = 0.75f)
+                    ) {
+                        Text(
+                            text = String.format(
+                                Locale.US,
+                                "%02d:%04.1f",
+                                (uiState.currentTimeSec / 60).toInt(),
+                                uiState.currentTimeSec % 60
+                            ),
+                            color = CapCutCyan,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
             }
 
-            // Timeline Control Bar
-            TimelineBar(
+            // 2. CapCut Multi-Track Timeline
+            CapCutMultiTrackTimeline(
                 currentTimeSec = uiState.currentTimeSec,
                 durationSec = uiState.durationSec,
                 fps = uiState.fps,
                 isPlaying = uiState.isPlaying,
+                timelineZoom = uiState.timelineZoom,
+                mediaOverlays = uiState.mediaOverlays,
+                selectedElementId = uiState.selectedElementId,
+                sceneMarkers = uiState.sceneMarkers,
                 onTogglePlay = { viewModel.togglePlay() },
                 onSeek = { viewModel.seekTo(it) },
-                onStepFrame = { viewModel.stepFrame(it) }
+                onStepFrame = { viewModel.stepFrame(it) },
+                onSelectElement = { viewModel.setSelectedElement(it) },
+                onSplitAtPlayhead = { viewModel.splitSelectedClipAtPlayhead() },
+                onDeleteSelected = { viewModel.deleteSelectedClip() },
+                onDuplicateSelected = { viewModel.duplicateSelectedClip() },
+                onZoomChange = { viewModel.setTimelineZoom(it) },
+                onAddMediaClick = { viewModel.selectTab(StudioTab.OVERLAY) }
             )
 
-            // Dynamic Panel based on Active Tab
-            when (uiState.activeTab) {
-                StudioTab.TEMPLATES -> {
-                    TemplateSelector(
-                        selectedTemplate = uiState.selectedTemplate,
-                        onSelectTemplate = { viewModel.loadTemplate(it) }
-                    )
-                }
-
-                StudioTab.CUSTOMIZE -> {
-                    QuickCustomizer(
-                        template = uiState.selectedTemplate,
-                        paramsMap = uiState.paramsMap,
-                        onUpdateParam = { k, v -> viewModel.updateParam(k, v) }
-                    )
-                }
-
-                StudioTab.CODE -> {
-                    CodeEditor(
-                        html = uiState.customHtml,
-                        css = uiState.customCss,
-                        js = uiState.customJs,
-                        isModified = uiState.isCustomCodeActive,
-                        onCodeChange = { h, c, j -> viewModel.updateCustomCode(h, c, j) },
-                        onReset = { viewModel.resetToTemplateCode() }
-                    )
-                }
-
-                StudioTab.SETTINGS -> {
-                    RenderSettingsDialog(
-                        aspectRatio = uiState.aspectRatio,
-                        resolution = uiState.resolution,
-                        fps = uiState.fps,
-                        durationSec = uiState.durationSec,
-                        onAspectRatioChange = { viewModel.setAspectRatio(it) },
-                        onResolutionChange = { viewModel.setResolution(it) },
-                        onFpsChange = { viewModel.setFps(it) },
-                        onDurationChange = { viewModel.setDuration(it) },
-                        onStartRender = { viewModel.startRender() }
-                    )
-                }
-
-                StudioTab.GALLERY -> {
-                    GalleryView(
-                        videos = uiState.savedVideos,
-                        selectedVideo = uiState.selectedGalleryVideo,
-                        onSelectVideo = { viewModel.selectGalleryVideo(it) },
-                        onShareVideo = { viewModel.shareVideo(it) },
-                        onDeleteVideo = { viewModel.deleteVideo(it) }
-                    )
+            // 3. CapCut Bottom Tool Drawer (Dynamic per active tool)
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(0.95f)
+                    .background(CapCutSurface),
+                color = CapCutSurface
+            ) {
+                when (uiState.activeTab) {
+                    StudioTab.EDIT -> {
+                        EditDrawer(
+                            state = uiState,
+                            viewModel = viewModel,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                    StudioTab.AUDIO -> {
+                        AudioDrawer(
+                            state = uiState,
+                            viewModel = viewModel,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                    StudioTab.TEXT -> {
+                        TextDrawer(
+                            state = uiState,
+                            viewModel = viewModel,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                    StudioTab.OVERLAY -> {
+                        OverlayDrawer(
+                            state = uiState,
+                            viewModel = viewModel,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                    StudioTab.EFFECTS -> {
+                        EffectsDrawer(
+                            state = uiState,
+                            viewModel = viewModel,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                    StudioTab.RATIO -> {
+                        RatioDrawer(
+                            state = uiState,
+                            viewModel = viewModel,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                    StudioTab.CODE -> {
+                        CodeEditor(
+                            html = uiState.customHtml,
+                            css = uiState.customCss,
+                            js = uiState.customJs,
+                            isModified = uiState.isCustomCodeActive,
+                            onCodeChange = { h, c, j -> viewModel.updateCustomCode(h, c, j) },
+                            onReset = { viewModel.resetToTemplateCode() },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                    StudioTab.GALLERY -> {
+                        GalleryView(
+                            videos = uiState.savedVideos,
+                            selectedVideo = uiState.selectedGalleryVideo,
+                            onSelectVideo = { viewModel.selectGalleryVideo(it) },
+                            onShareVideo = { viewModel.shareVideo(it) },
+                            onDeleteVideo = { viewModel.deleteVideo(it) },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
                 }
             }
         }
     }
 
-    // Export Progress Modal
+    // Export / Render Progress Modal
     if (uiState.showRenderDialog) {
         ExportProgressModal(
             renderState = uiState.renderState,
@@ -194,7 +269,7 @@ fun StudioScreen(
                 viewModel.dismissRenderDialog()
                 viewModel.selectTab(StudioTab.GALLERY)
             },
-            onShareVideo = { viewModel.shareVideo(it) }
+            onShareVideo = { video -> viewModel.shareVideo(video) }
         )
     }
 
@@ -207,110 +282,141 @@ fun StudioScreen(
 }
 
 @Composable
-private fun StudioTopBar(
-    aspectRatioText: String,
-    onExplainerClick: () -> Unit,
-    onRenderClick: () -> Unit
+private fun CapCutTopBar(
+    state: StudioUiState,
+    onUndo: () -> Unit,
+    onRedo: () -> Unit,
+    onOpenRatio: () -> Unit,
+    onOpenInfo: () -> Unit,
+    onExportClick: () -> Unit
 ) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .statusBarsPadding(),
-        color = StudioDarkBg,
-        shadowElevation = 0.dp
+        color = CapCutSurface,
+        shadowElevation = 4.dp
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .height(48.dp)
+                .padding(horizontal = 10.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Brand Logo & Title
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.clickable(onClick = onExplainerClick)
-            ) {
+            // Left: Project Logo / Badge
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
-                        .size(36.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(PrimaryBrandContainer)
-                        .border(1.dp, PrimaryBrand.copy(alpha = 0.25f), RoundedCornerShape(10.dp)),
+                        .size(28.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(CapCutCyan),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.Movie,
-                        contentDescription = "HyperFrames",
-                        tint = PrimaryBrand,
-                        modifier = Modifier.size(20.dp)
+                        contentDescription = "CapCut Video Studio",
+                        tint = OnCapCutCyan,
+                        modifier = Modifier.size(16.dp)
                     )
                 }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "HyperFrames",
+                    color = TextPrimary,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 0.5.sp
+                )
+            }
 
-                Spacer(modifier = Modifier.width(10.dp))
-
-                Column {
+            // Center: Format & Resolution Pill (Clickable)
+            Surface(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(16.dp))
+                    .clickable(onClick = onOpenRatio),
+                color = CapCutSurfaceVariant,
+                shape = RoundedCornerShape(16.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, CapCutCardBorder)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
-                        text = "HyperFrames",
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = (-0.3).sp,
-                        color = TextPrimary
-                    )
-                    Text(
-                        text = "HTML to Video Engine",
+                        text = "${state.resolution.label} · ${state.aspectRatio.label}",
                         fontSize = 11.sp,
-                        color = PrimaryBrand,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.Bold,
+                        color = CapCutCyan
                     )
                 }
             }
 
-            // Actions: Info + Export CTA
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                // Info Button
+            // Right: Undo, Redo, Info, Export Button
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(
-                    onClick = onExplainerClick,
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clip(CircleShape)
-                        .background(StudioSurface)
-                        .border(1.dp, StudioCardBorderSubtle, CircleShape)
+                    onClick = onUndo,
+                    enabled = state.canUndo,
+                    modifier = Modifier.size(32.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.HelpOutline,
-                        contentDescription = "How It Works",
-                        tint = TextSecondary,
-                        modifier = Modifier.size(19.dp)
+                        imageVector = Icons.AutoMirrored.Filled.Undo,
+                        contentDescription = "Undo",
+                        tint = if (state.canUndo) TextPrimary else TextMuted.copy(alpha = 0.3f),
+                        modifier = Modifier.size(18.dp)
                     )
                 }
 
-                // Render Action Button
-                Button(
-                    onClick = onRenderClick,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = PrimaryBrand,
-                        contentColor = OnPrimaryBrand
-                    ),
-                    shape = RoundedCornerShape(12.dp),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-                    modifier = Modifier
-                        .height(38.dp)
-                        .shadow(4.dp, RoundedCornerShape(12.dp), spotColor = PrimaryBrand.copy(alpha = 0.4f))
-                        .testTag("top_render_button")
+                IconButton(
+                    onClick = onRedo,
+                    enabled = state.canRedo,
+                    modifier = Modifier.size(32.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Movie,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
+                        imageVector = Icons.AutoMirrored.Filled.Redo,
+                        contentDescription = "Redo",
+                        tint = if (state.canRedo) TextPrimary else TextMuted.copy(alpha = 0.3f),
+                        modifier = Modifier.size(18.dp)
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                }
+
+                IconButton(
+                    onClick = onOpenInfo,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.HelpOutline,
+                        contentDescription = "Info",
+                        tint = TextSecondary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(4.dp))
+
+                // CapCut Glowing Cyan Export Button
+                Button(
+                    onClick = onExportClick,
+                    shape = RoundedCornerShape(18.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = CapCutCyan,
+                        contentColor = OnCapCutCyan
+                    ),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                    modifier = Modifier
+                        .height(30.dp)
+                        .testTag("capcut_export_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.IosShare,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "Render MP4",
-                        fontSize = 12.sp,
+                        text = "Экспорт",
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -318,123 +424,3 @@ private fun StudioTopBar(
         }
     }
 }
-
-@Composable
-private fun StudioBottomNav(
-    activeTab: StudioTab,
-    onSelectTab: (StudioTab) -> Unit,
-    galleryCount: Int
-) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .navigationBarsPadding(),
-        color = StudioSurface,
-        shadowElevation = 8.dp,
-        border = androidx.compose.foundation.BorderStroke(1.dp, StudioCardBorderSubtle)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.SpaceAround,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            StudioTabItem(
-                label = "Presets",
-                icon = Icons.Default.AutoAwesome,
-                isSelected = activeTab == StudioTab.TEMPLATES,
-                onClick = { onSelectTab(StudioTab.TEMPLATES) },
-                accentColor = PrimaryBrand
-            )
-            StudioTabItem(
-                label = "Customize",
-                icon = Icons.Default.Edit,
-                isSelected = activeTab == StudioTab.CUSTOMIZE,
-                onClick = { onSelectTab(StudioTab.CUSTOMIZE) },
-                accentColor = NeonViolet
-            )
-            StudioTabItem(
-                label = "Code",
-                icon = Icons.Default.Code,
-                isSelected = activeTab == StudioTab.CODE,
-                onClick = { onSelectTab(StudioTab.CODE) },
-                accentColor = EmeraldGreen
-            )
-            StudioTabItem(
-                label = "Format",
-                icon = Icons.Default.Settings,
-                isSelected = activeTab == StudioTab.SETTINGS,
-                onClick = { onSelectTab(StudioTab.SETTINGS) },
-                accentColor = CyberPink
-            )
-            StudioTabItem(
-                label = "Gallery",
-                icon = Icons.Default.VideoLibrary,
-                isSelected = activeTab == StudioTab.GALLERY,
-                onClick = { onSelectTab(StudioTab.GALLERY) },
-                accentColor = PrimaryBrand,
-                badgeText = if (galleryCount > 0) "$galleryCount" else null
-            )
-        }
-    }
-}
-
-@Composable
-private fun StudioTabItem(
-    label: String,
-    icon: ImageVector,
-    isSelected: Boolean,
-    onClick: () -> Unit,
-    accentColor: Color,
-    badgeText: String? = null
-) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (isSelected) PrimaryBrandContainer.copy(alpha = 0.6f) else Color.Transparent)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 6.dp)
-            .testTag("nav_tab_${label.lowercase().replace(" ", "_")}"),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Box {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = label,
-                    tint = if (isSelected) accentColor else TextMuted,
-                    modifier = Modifier.size(22.dp)
-                )
-                if (badgeText != null) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .size(15.dp)
-                            .clip(CircleShape)
-                            .background(PrimaryBrand),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = badgeText,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = OnPrimaryBrand
-                        )
-                    }
-                }
-            }
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = label,
-                fontSize = 11.sp,
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                color = if (isSelected) accentColor else TextMuted
-            )
-        }
-    }
-}
-

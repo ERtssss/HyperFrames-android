@@ -35,7 +35,9 @@ data class RenderConfiguration(
     val customHtml: String? = null,
     val customCss: String? = null,
     val customJs: String? = null,
-    val paramsMap: Map<String, String> = emptyMap()
+    val paramsMap: Map<String, String> = emptyMap(),
+    val mediaOverlays: List<MediaOverlayItem> = emptyList(),
+    val voiceoverState: VoiceoverState? = null
 ) {
     val totalFrames: Int get() = (durationSec * fps).toInt().coerceAtLeast(1)
 

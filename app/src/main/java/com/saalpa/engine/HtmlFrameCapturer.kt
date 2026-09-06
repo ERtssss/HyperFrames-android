@@ -32,20 +32,24 @@ class HtmlFrameCapturer(private val context: Context) {
         val wv = WebView(context).apply {
             layoutParams = ViewGroup.LayoutParams(width, height)
             setBackgroundColor(Color.BLACK)
+            setInitialScale(100)
             settings.apply {
                 javaScriptEnabled = true
                 domStorageEnabled = true
                 databaseEnabled = true
                 allowFileAccess = true
-                loadWithOverviewMode = true
+                loadWithOverviewMode = false
                 useWideViewPort = true
+                textZoom = 100
                 mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                 cacheMode = WebSettings.LOAD_NO_CACHE
             }
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
-                    loadDeferred.complete(true)
+                    if (!loadDeferred.isCompleted) {
+                        loadDeferred.complete(true)
+                    }
                 }
             }
         }
@@ -62,8 +66,8 @@ class HtmlFrameCapturer(private val context: Context) {
 
         // Wait for page ready
         loadDeferred.await()
-        // Small initial stabilization for web fonts/CSS animations
-        delay(120)
+        // Stabilization delay for CDN scripts (GSAP), fonts, and DOM layout initialization
+        delay(350)
     }
 
     suspend fun captureFrame(
@@ -77,9 +81,19 @@ class HtmlFrameCapturer(private val context: Context) {
         val jsDeferred = CompletableDeferred<Unit>()
 
         val jsCode = """
-            if (window.HyperFrames && window.HyperFrames.seek) {
-                window.HyperFrames.seek($timeSec, $progress);
+            if (window.__hfSeek) {
+                window.__hfSeek($timeSec, $progress);
             } else {
+                if (window.__timelines) {
+                    for (var k in window.__timelines) {
+                        if (window.__timelines[k] && typeof window.__timelines[k].seek === 'function') {
+                            window.__timelines[k].seek($timeSec, false);
+                        }
+                    }
+                }
+                if (typeof window.seekTo === 'function') window.seekTo($timeSec);
+                if (window.gsap && window.gsap.globalTimeline) window.gsap.globalTimeline.seek($timeSec, false);
+                if (window.HyperFrames && window.HyperFrames.seek) window.HyperFrames.seek($timeSec, $progress);
                 document.documentElement.style.setProperty('--time', '${timeSec}s');
                 document.documentElement.style.setProperty('--progress', '$progress');
             }
@@ -90,8 +104,8 @@ class HtmlFrameCapturer(private val context: Context) {
         }
         jsDeferred.await()
 
-        // Wait for DOM repaint
-        delay(8)
+        // Wait for DOM & GSAP repaint
+        delay(12)
 
         val bitmap = reusableBitmap ?: Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
