@@ -2,8 +2,9 @@ package com.saalpa
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
-import com.saalpa.data.TemplateRepository
 import com.saalpa.model.AspectRatioType
+import com.saalpa.model.project.DefaultProjectFactory
+import com.saalpa.model.project.ProjectHtmlCompiler
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -24,16 +25,19 @@ class ExampleRobolectricTest {
   }
 
   @Test
-  fun `verify templates repository`() {
-    val templates = TemplateRepository.templates
-    assertTrue(templates.isNotEmpty())
-    val mlbb = templates.first { it.id == "mlbb_patch_update" }
-    assertNotNull(mlbb)
-    val compiled = mlbb.compileFullHtml(emptyMap(), 5.0f, 25.0f)
-    assertTrue(compiled.contains("hyperframes-bridge"))
+  fun `verify empty default project creation and compiler`() {
+    val project = DefaultProjectFactory.createDefaultProject()
+    assertNotNull(project)
+    assertEquals(1, project.scenes.size)
+    val scene1 = project.scenes.first()
+    assertEquals("Scene 1", scene1.title)
+    assertTrue("Scene 1 must start with empty composition", scene1.elements.isEmpty())
+
+    val compiled = ProjectHtmlCompiler.compile(project)
+    assertTrue(compiled.contains("<!DOCTYPE html>"))
+    assertTrue(compiled.contains("window.AndroidHyperFrames"))
     assertTrue(compiled.contains("window.__hfSeek"))
-    assertTrue(compiled.contains("window.__timelines"))
-    assertTrue(compiled.contains("MOBILE LEGENDS"))
+    assertTrue(compiled.contains("gsap"))
   }
 }
 

@@ -121,7 +121,11 @@ data class HyperFrameElement(
     val animation: HyperFrameAnimation = HyperFrameAnimation(),
     val volume: Float = 1.0f,
     val isMuted: Boolean = false,
-    val isEnabled: Boolean = true
+    val isEnabled: Boolean = true,
+    val widthPercent: Float = 100f,
+    val heightPercent: Float = 100f,
+    val objectFit: String = "cover", // contain, cover, fill
+    val objectPosition: String = "center"
 )
 
 /**
@@ -175,6 +179,35 @@ data class HyperFramesProject(
     val settings: ProjectSettings = ProjectSettings()
 ) {
     val totalDurationSec: Float get() = scenes.sumOf { it.durationSec.toDouble() }.toFloat().coerceAtLeast(0.5f)
+
+    fun getEffectiveDimensions(): Pair<Int, Int> {
+        val baseDim = when (resolution) {
+            RenderResolution.SD_540P -> 540
+            RenderResolution.HD_720P -> 720
+            RenderResolution.FHD_1080P -> 1080
+        }
+        return when (aspectRatio) {
+            AspectRatioType.PORTRAIT_9_16 -> {
+                val w = (baseDim / 2) * 2
+                val h = (((baseDim * 16) / 9) / 2) * 2
+                Pair(w, h)
+            }
+            AspectRatioType.SQUARE_1_1 -> {
+                val s = (baseDim / 2) * 2
+                Pair(s, s)
+            }
+            AspectRatioType.LANDSCAPE_16_9 -> {
+                val h = (baseDim / 2) * 2
+                val w = (((baseDim * 16) / 9) / 2) * 2
+                Pair(w, h)
+            }
+            AspectRatioType.PORTRAIT_4_5 -> {
+                val w = (baseDim / 2) * 2
+                val h = (((baseDim * 5) / 4) / 2) * 2
+                Pair(w, h)
+            }
+        }
+    }
 
     fun getSceneAtTime(timeSec: Float): HyperFrameScene? {
         var accumulated = 0f

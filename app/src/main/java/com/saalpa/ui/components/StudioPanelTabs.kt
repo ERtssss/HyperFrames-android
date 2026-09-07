@@ -15,12 +15,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.filled.FormatPaint
 import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.ViewCarousel
 import androidx.compose.material.icons.filled.Web
 import androidx.compose.material3.Icon
@@ -51,9 +50,12 @@ import com.saalpa.ui.theme.StudioTextSecondary
 enum class StudioActivePanel(val title: String, val icon: ImageVector) {
     SCRIPT("Сценарий & Сцены", Icons.Default.ViewCarousel),
     INSPECTOR("Инспектор", Icons.Default.FormatPaint),
-    AVATAR_VOICE("Аватар & Голос", Icons.Default.Person),
-    MEDIA("Медиа-Хаб", Icons.Default.FolderZip),
-    TEMPLATES("Шаблоны", Icons.Default.AutoAwesome)
+    VOICE("Голос & Озвучка", Icons.Default.RecordVoiceOver),
+    MEDIA("Медиа-Хаб", Icons.Default.FolderZip);
+
+    companion object {
+        val AVATAR_VOICE get() = VOICE
+    }
 }
 
 @Composable

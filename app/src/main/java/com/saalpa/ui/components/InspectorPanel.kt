@@ -63,6 +63,7 @@ import com.saalpa.model.project.HyperFrameElement
 import com.saalpa.model.project.HyperFrameScene
 import com.saalpa.model.project.SceneTransitionType
 import com.saalpa.ui.theme.StudioAccent
+import com.saalpa.ui.theme.StudioAccentContainer
 import com.saalpa.ui.theme.StudioAccentLight
 import com.saalpa.ui.theme.StudioBorder
 import com.saalpa.ui.theme.StudioBorderSubtle
@@ -85,7 +86,7 @@ fun InspectorPanel(
     onUpdateSceneDuration: (Float) -> Unit,
     onUpdateSceneBg: (String) -> Unit,
     onUpdateSceneTransition: (SceneTransitionType) -> Unit,
-    onToggleSceneAvatar: (Boolean) -> Unit,
+    onToggleSceneAvatar: (Boolean) -> Unit = {},
     onUpdateElement: (HyperFrameElement) -> Unit,
     onDeleteElement: (String) -> Unit,
     onAddTextElement: () -> Unit,
@@ -167,6 +168,80 @@ fun InspectorPanel(
                                     shape = CircleShape
                                 )
                                 .clickable { onUpdateElement(selectedElement.copy(textColorHex = hex)) }
+                        )
+                    }
+                }
+            }
+
+            // Media Sizing and Framing (Object Fit, Width/Height %, Mute)
+            if (selectedElement.type == ElementType.VIDEO || selectedElement.type == ElementType.IMAGE) {
+                Spacer(modifier = Modifier.height(10.dp))
+                InspectorSectionTitle("Кадрирование (Object Fit)")
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    val fits = listOf("cover" to "Cover", "contain" to "Contain", "fill" to "Fill")
+                    fits.forEach { (fitKey, fitLabel) ->
+                        val isSel = selectedElement.objectFit == fitKey
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (isSel) StudioAccentContainer else StudioSurfaceVariant)
+                                .border(1.dp, if (isSel) StudioAccentLight else StudioBorder, RoundedCornerShape(6.dp))
+                                .clickable { onUpdateElement(selectedElement.copy(objectFit = fitKey)) }
+                                .padding(vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = fitLabel,
+                                fontSize = 10.sp,
+                                fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isSel) Color.White else StudioTextSecondary
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Ширина (% от холста)", fontSize = 11.sp, color = StudioTextSecondary)
+                    Text("${selectedElement.widthPercent.toInt()}%", fontSize = 11.sp, color = StudioAccentLight, fontFamily = FontFamily.Monospace)
+                }
+                Slider(
+                    value = selectedElement.widthPercent,
+                    onValueChange = { onUpdateElement(selectedElement.copy(widthPercent = it)) },
+                    valueRange = 10f..100f,
+                    colors = SliderDefaults.colors(thumbColor = StudioAccentLight, activeTrackColor = StudioAccent)
+                )
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Высота (% от холста)", fontSize = 11.sp, color = StudioTextSecondary)
+                    Text("${selectedElement.heightPercent.toInt()}%", fontSize = 11.sp, color = StudioAccentLight, fontFamily = FontFamily.Monospace)
+                }
+                Slider(
+                    value = selectedElement.heightPercent,
+                    onValueChange = { onUpdateElement(selectedElement.copy(heightPercent = it)) },
+                    valueRange = 10f..100f,
+                    colors = SliderDefaults.colors(thumbColor = StudioAccentLight, activeTrackColor = StudioAccent)
+                )
+
+                if (selectedElement.type == ElementType.VIDEO) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(StudioSurfaceVariant)
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Без звука (Mute)", fontSize = 11.sp, color = StudioTextPrimary)
+                        Switch(
+                            checked = selectedElement.isMuted,
+                            onCheckedChange = { onUpdateElement(selectedElement.copy(isMuted = it)) },
+                            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = StudioAccent)
                         )
                     }
                 }
@@ -315,42 +390,6 @@ fun InspectorPanel(
                         Text(text = name, fontSize = 9.sp, color = StudioTextSecondary, maxLines = 1)
                     }
                 }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Avatar Toggle
-            InspectorSectionTitle("AI Аватар сцены")
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(StudioSurfaceVariant)
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Person,
-                        contentDescription = "Аватар",
-                        tint = StudioPurple,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Column {
-                        Text(scene.avatar.characterName, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = StudioTextPrimary)
-                        Text("Ведущий сцены", fontSize = 9.sp, color = StudioTextMuted)
-                    }
-                }
-                Switch(
-                    checked = scene.avatar.isEnabled,
-                    onCheckedChange = onToggleSceneAvatar,
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color.White,
-                        checkedTrackColor = StudioAccent
-                    )
-                )
             }
 
             Spacer(modifier = Modifier.height(14.dp))

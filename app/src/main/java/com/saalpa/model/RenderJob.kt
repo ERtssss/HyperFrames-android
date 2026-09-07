@@ -12,7 +12,8 @@ sealed class RenderState {
         val progress: Float, // 0.0f to 1.0f
         val fpsSpeed: Float,
         val previewBitmap: Bitmap? = null,
-        val elapsedTimeMs: Long = 0L
+        val elapsedTimeMs: Long = 0L,
+        val estimatedRemainingSec: Int = 0
     ) : RenderState()
     data class Finalizing(val totalFrames: Int) : RenderState()
     data class Completed(
@@ -27,7 +28,8 @@ sealed class RenderState {
 }
 
 data class RenderConfiguration(
-    val templateId: String,
+    val projectId: String = "",
+    val projectName: String = "HyperFrame",
     val durationSec: Float = 3.0f,
     val fps: Int = 30,
     val resolution: RenderResolution = RenderResolution.HD_720P,

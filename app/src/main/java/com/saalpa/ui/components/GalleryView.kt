@@ -144,7 +144,7 @@ fun GalleryView(
                             fontWeight = FontWeight.Medium
                         )
                         Text(
-                            text = "Render your first motion graphic template to MP4",
+                            text = "Render your first motion graphic project to MP4",
                             color = TextMuted,
                             fontSize = 11.sp
                         )

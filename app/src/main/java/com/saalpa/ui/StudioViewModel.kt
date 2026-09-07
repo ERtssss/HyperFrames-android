@@ -7,7 +7,6 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.saalpa.data.ImportedZipAsset
-import com.saalpa.data.TemplateRepository
 import com.saalpa.data.VideoStorageManager
 import com.saalpa.data.VoiceoverAudioService
 import com.saalpa.data.ZipMediaManager
@@ -22,7 +21,6 @@ import com.saalpa.model.RenderResolution
 import com.saalpa.model.RenderState
 import com.saalpa.model.SavedVideo
 import com.saalpa.model.VideoEffectType
-import com.saalpa.model.VideoTemplate
 import com.saalpa.model.project.DefaultProjectFactory
 import com.saalpa.model.project.ElementType
 import com.saalpa.model.project.ElementTransform
@@ -198,7 +196,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             transition = SceneTransitionType.FADE,
             avatar = SceneAvatarSettings(
                 characterName = "Alex Host",
-                isEnabled = true
+                isEnabled = false
             ),
             composition = SceneComposition(
                 backgroundGradient = "radial-gradient(circle at 50% 30%, #1e1b4b 0%, #09081a 100%)"
@@ -509,6 +507,21 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.update { it.copy(activePanel = panel) }
     }
 
+    fun createNewProject() {
+        pushUndo()
+        val newProj = DefaultProjectFactory.createDefaultProject()
+        _uiState.update {
+            it.copy(
+                project = newProj,
+                activeSceneId = newProj.scenes.firstOrNull()?.id,
+                selectedElementId = null,
+                currentTimeSec = 0f,
+                isPlaying = false,
+                activePanel = StudioActivePanel.SCRIPT
+            )
+        }
+    }
+
     fun setProjectName(name: String) {
         _uiState.update { it.copy(project = it.project.copy(name = name)) }
     }
@@ -716,7 +729,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         val compiledHtml = getCompiledHtmlForPreview()
 
         val config = RenderConfiguration(
-            templateId = state.project.id,
+            projectId = state.project.id,
+            projectName = state.project.name,
             durationSec = state.totalDurationSec,
             fps = state.project.fps,
             resolution = state.project.resolution,
@@ -728,25 +742,11 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             mediaOverlays = emptyList()
         )
 
-        val template = VideoTemplate(
-            id = state.project.id,
-            name = state.project.name,
-            category = "HyperFrames Studio",
-            description = "Hardware encoded multi-scene project",
-            defaultDurationSec = state.totalDurationSec,
-            defaultFps = state.project.fps,
-            defaultAspectRatio = state.project.aspectRatio,
-            params = emptyList(),
-            htmlBody = compiledHtml,
-            cssStyle = "",
-            jsScript = ""
-        )
-
         _uiState.update { it.copy(showRenderDialog = true, renderState = RenderState.Idle) }
 
         renderJob?.cancel()
         renderJob = viewModelScope.launch {
-            engine.renderVideo(template, config).collectLatest { status ->
+            engine.renderVideo(config).collectLatest { status ->
                 _uiState.update { it.copy(renderState = status) }
                 if (status is RenderState.Completed) {
                     refreshGallery()
@@ -799,10 +799,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         }
 
         return ProjectHtmlCompiler.compile(
-            project = state.project,
-            currentTimeSec = state.currentTimeSec,
-            isPlaying = state.isPlaying,
-            activeSceneId = state.activeSceneId
+            project = state.project
         )
     }
 }

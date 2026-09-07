@@ -66,13 +66,12 @@ fun WebViewPreview(
         AndroidView(
             factory = { context ->
                 WebView(context).apply {
+                    setLayerType(View.LAYER_TYPE_SOFTWARE, null)
                     layoutParams = ViewGroup.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT
                     )
                     setBackgroundColor(Color.BLACK)
-                    // Render in software mode to avoid Mesa DRM rendernode checks in virtualized/container environments
-                    setLayerType(View.LAYER_TYPE_SOFTWARE, null)
                     settings.apply {
                         javaScriptEnabled = true
                         domStorageEnabled = true

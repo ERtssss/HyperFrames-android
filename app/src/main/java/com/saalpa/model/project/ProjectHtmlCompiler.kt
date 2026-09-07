@@ -1,12 +1,12 @@
 package com.saalpa.model.project
 
-import com.saalpa.model.AspectRatioType
 import com.saalpa.model.MediaAnimationType
 import com.saalpa.model.VideoEffectType
 
 /**
  * Compiles a HyperFramesProject into a self-contained, GSAP-driven HTML/CSS/JS document.
- * This runs natively in Android WebView for both live Canvas preview and hardware frame capturing.
+ * Follows a unified composition coordinate system (e.g. 1920x1080) for both live Canvas
+ * preview and hardware frame-exact MP4 rendering.
  */
 object ProjectHtmlCompiler {
 
@@ -16,13 +16,7 @@ object ProjectHtmlCompiler {
         isPlaying: Boolean = false,
         activeSceneId: String? = null
     ): String {
-        val (targetW, targetH) = when (project.aspectRatio) {
-            AspectRatioType.PORTRAIT_9_16 -> 1080 to 1920
-            AspectRatioType.SQUARE_1_1 -> 1080 to 1080
-            AspectRatioType.LANDSCAPE_16_9 -> 1920 to 1080
-            AspectRatioType.PORTRAIT_4_5 -> 1080 to 1350
-        }
-
+        val (targetW, targetH) = project.getEffectiveDimensions()
         val totalDuration = project.totalDurationSec
         val scenesHtml = StringBuilder()
         val gsapTimelines = StringBuilder()
@@ -32,7 +26,6 @@ object ProjectHtmlCompiler {
         project.scenes.forEachIndexed { index, scene ->
             val sceneDuration = scene.durationSec
             val sceneEnd = currentSceneStart + sceneDuration
-            val isSceneActive = if (activeSceneId != null) scene.id == activeSceneId else (currentTimeSec >= currentSceneStart && currentTimeSec < sceneEnd)
 
             // Build Scene Elements HTML
             val elementsHtml = StringBuilder()
@@ -61,17 +54,27 @@ object ProjectHtmlCompiler {
                         """.trimIndent())
                     }
                     ElementType.IMAGE -> {
+                        val imgW = (targetW * (element.widthPercent / 100f).coerceAtMost(0.95f)).toInt()
+                        val imgH = (targetH * (element.heightPercent / 100f).coerceAtMost(0.95f)).toInt()
+                        val fit = element.objectFit.ifBlank { "contain" }
                         elementsHtml.append("""
-                            <div id="el-${element.id}" class="scene-element el-image $animClass" style="$styleBase">
-                                <img src="${element.sourceUri}" alt="${element.name}" style="max-width:500px; max-height:500px; object-fit:contain; border-radius:16px; box-shadow:0 12px 36px rgba(0,0,0,0.6);" />
+                            <div id="el-${element.id}" class="scene-element el-image $animClass" 
+                                 style="$styleBase max-width:${imgW}px; max-height:${imgH}px; overflow:hidden; border-radius:16px; display:flex; align-items:center; justify-content:center;">
+                                <img src="${element.sourceUri}" alt="${element.name}" 
+                                     style="width:auto; height:auto; max-width:100%; max-height:100%; object-fit:$fit; border-radius:16px; box-shadow:0 12px 36px rgba(0,0,0,0.6);" />
                             </div>
                         """.trimIndent())
                     }
                     ElementType.VIDEO -> {
                         val muted = if (element.isMuted) "muted" else ""
+                        val fit = element.objectFit.ifBlank { "cover" }
+                        val videoW = (targetW * (element.widthPercent / 100f).coerceAtMost(1f)).toInt()
+                        val videoH = (targetH * (element.heightPercent / 100f).coerceAtMost(1f)).toInt()
                         elementsHtml.append("""
-                            <div id="el-${element.id}" class="scene-element el-video $animClass" style="$styleBase">
-                                <video src="${element.sourceUri}" playsinline webkit-playsinline $muted style="max-width:900px; max-height:1200px; border-radius:16px;"></video>
+                            <div id="el-${element.id}" class="scene-element el-video $animClass" 
+                                 style="$styleBase width:${videoW}px; height:${videoH}px; max-width:${targetW}px; max-height:${targetH}px; overflow:hidden; border-radius:16px; display:flex; align-items:center; justify-content:center;">
+                                <video src="${element.sourceUri}" playsinline webkit-playsinline autoplay loop $muted 
+                                       style="width:100%; height:100%; max-width:100%; max-height:100%; object-fit:$fit; object-position:${element.objectPosition}; display:block; border-radius:16px;"></video>
                             </div>
                         """.trimIndent())
                     }
@@ -101,22 +104,7 @@ object ProjectHtmlCompiler {
                 }
             }
 
-            // Build Scene Avatar HTML
-            val avatarHtml = if (scene.avatar.isEnabled) {
-                """
-                <div class="scene-avatar" style="position:absolute; left:${scene.avatar.xPercent}%; top:${scene.avatar.yPercent}%; transform:translate(-50%, -50%) scale(${scene.avatar.scale}); z-index:45; pointer-events:none; text-align:center;">
-                    <div style="position:relative; display:inline-block;">
-                        <img src="${scene.avatar.avatarImageUrl}" alt="${scene.avatar.characterName}" style="width:240px; height:240px; border-radius:50%; object-fit:cover; border:4px solid #6366f1; box-shadow:0 8px 30px rgba(99,102,241,0.5);" />
-                        <div style="position:absolute; bottom:6px; right:6px; background:#10b981; width:22px; height:22px; border-radius:50%; border:3px solid #0f1117;"></div>
-                    </div>
-                    <div style="margin-top:8px; font-family:'Montserrat',sans-serif; font-size:16px; font-weight:700; color:#e2e8f0; background:rgba(15,17,23,0.8); padding:4px 14px; border-radius:20px; border:1px solid #334155; display:inline-block;">
-                        ${scene.avatar.characterName}
-                    </div>
-                </div>
-                """.trimIndent()
-            } else ""
-
-            // Build Scene Container
+            // Build Scene Container (Avatar completely removed)
             val sceneBg = if (scene.composition.backgroundGradient.isNotBlank()) scene.composition.backgroundGradient else scene.composition.backgroundColor
             val customSceneContent = scene.composition.customHtml
 
@@ -126,10 +114,9 @@ object ProjectHtmlCompiler {
                      data-scene-index="$index" 
                      data-start="$currentSceneStart" 
                      data-duration="$sceneDuration"
-                     style="position:absolute; inset:0; width:100%; height:100%; background:$sceneBg; overflow:hidden; display:flex; flex-direction:column; justify-content:center; align-items:center; opacity:0; visibility:hidden;">
+                     style="position:absolute; inset:0; width:${targetW}px; height:${targetH}px; background:$sceneBg; overflow:hidden; opacity:0; visibility:hidden;">
                     $customSceneContent
                     $elementsHtml
-                    $avatarHtml
                 </div>
             """.trimIndent())
 
@@ -214,14 +201,26 @@ object ProjectHtmlCompiler {
         html, body {
             width: 100%;
             height: 100%;
+            margin: 0;
+            padding: 0;
             overflow: hidden;
-            background: #08090d;
+            background: #000000;
             color: #ffffff;
             font-family: 'Inter', -apple-system, sans-serif;
             -webkit-user-select: none;
             user-select: none;
         }
-        #hyperframe-root {
+        #composition-stage {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #000000;
+        }
+        #composition, #hyperframe-root {
             position: absolute;
             width: ${targetW}px;
             height: ${targetH}px;
@@ -230,9 +229,27 @@ object ProjectHtmlCompiler {
             transform: translate(-50%, -50%);
             transform-origin: center center;
             overflow: hidden;
+            contain: strict;
             background: #0e1015;
             box-shadow: 0 0 60px rgba(0,0,0,0.8);
         }
+        .hyperframe-scene {
+            position: absolute;
+            inset: 0;
+            width: ${targetW}px;
+            height: ${targetH}px;
+            overflow: hidden;
+        }
+        
+        /* Video containment and scaling */
+        video {
+            max-width: 100%;
+            max-height: 100%;
+            display: block;
+        }
+        .fit-contain { object-fit: contain !important; }
+        .fit-cover { object-fit: cover !important; }
+        .fit-fill { object-fit: fill !important; }
         
         /* Keyframe animations for elements */
         @keyframes animPulse {
@@ -252,70 +269,103 @@ object ProjectHtmlCompiler {
     </style>
 </head>
 <body>
-    <div id="hyperframe-root" data-width="$targetW" data-height="$targetH">
-        $scenesHtml
+    <div id="composition-stage">
+        <div id="composition" data-width="$targetW" data-height="$targetH">
+            $scenesHtml
+        </div>
     </div>
 
     <script id="hyperframes-runtime">
         (function() {
             window.HyperFrames = window.HyperFrames || {};
             window.HyperFrames.duration = $totalDuration;
-            window.HyperFrames.time = $currentTimeSec;
-            window.HyperFrames.isPlaying = $isPlaying;
+            window.HyperFrames.time = 0;
+            window.HyperFrames.isPlaying = false;
 
-            // Auto-fit canvas to viewport
+            // Unified auto-fit scaling logic (min of availableWidth / targetW, availableHeight / targetH)
             function autoFit() {
-                var root = document.getElementById('hyperframe-root');
-                if (!root) return;
+                var comp = document.getElementById('composition') || document.getElementById('hyperframe-root');
+                if (!comp) return;
                 var targetW = $targetW;
                 var targetH = $targetH;
-                var winW = window.innerWidth || document.documentElement.clientWidth;
-                var winH = window.innerHeight || document.documentElement.clientHeight;
-                if (winW > 0 && winH > 0) {
-                    var scale = Math.min(winW / targetW, winH / targetH);
-                    root.style.transform = 'translate(-50%, -50%) scale(' + scale + ')';
+                var stage = document.getElementById('composition-stage') || document.body;
+                var availableW = stage.clientWidth || window.innerWidth || document.documentElement.clientWidth;
+                var availableH = stage.clientHeight || window.innerHeight || document.documentElement.clientHeight;
+                if (availableW > 0 && availableH > 0 && targetW > 0 && targetH > 0) {
+                    var scale = Math.min(availableW / targetW, availableH / targetH);
+                    comp.style.transform = 'translate(-50%, -50%) scale(' + scale + ')';
                 }
             }
             window.addEventListener('resize', autoFit);
+            window.addEventListener('orientationchange', autoFit);
+            document.addEventListener('DOMContentLoaded', autoFit);
             autoFit();
 
-            // GSAP Timeline setup
+            // GSAP Timeline setup & lag smoothing optimization for deterministic offline rendering
+            if (window.gsap && window.gsap.ticker) {
+                window.gsap.ticker.lagSmoothing(0);
+            }
             var tl = gsap.timeline({ paused: true });
             $gsapTimelines
 
             window.__hfTl = tl;
             window.__timelines = { main: tl };
 
-            // Seek function called from Android
-            window.__hfSeek = function(timeSec, progress) {
+            // Cache DOM elements to avoid expensive querySelectorAll during frame rendering loop
+            var cachedVideos = [];
+            var cachedScenes = [];
+            function refreshDomCache() {
+                cachedVideos = Array.prototype.slice.call(document.querySelectorAll('video'));
+                cachedScenes = Array.prototype.slice.call(document.querySelectorAll('.hyperframe-scene'));
+            }
+
+            // Frame-exact seek function called from Android without reloading DOM
+            window.__hfSeek = function(timeSec, progress, isExport) {
                 window.HyperFrames.time = timeSec;
                 if (tl) {
                     tl.seek(timeSec, false);
                 }
-                // Notify Android bridge about active scene if needed
-                var scenes = document.querySelectorAll('.hyperframe-scene');
-                for (var i = 0; i < scenes.length; i++) {
-                    var sc = scenes[i];
-                    var st = parseFloat(sc.getAttribute('data-start') || '0');
-                    var dur = parseFloat(sc.getAttribute('data-duration') || '5');
-                    if (timeSec >= st && timeSec < (st + dur)) {
-                        var idx = parseInt(sc.getAttribute('data-scene-index') || '0');
-                        var scId = sc.getAttribute('data-scene-id') || '';
-                        if (window.AndroidHyperFrames && typeof window.AndroidHyperFrames.onSceneChange === 'function') {
-                            window.AndroidHyperFrames.onSceneChange(idx, scId, 'Scene ' + (idx + 1));
+
+                // Synchronize HTML5 videos with current time
+                if (cachedVideos.length > 0) {
+                    for (var v = 0; v < cachedVideos.length; v++) {
+                        var vid = cachedVideos[v];
+                        var sceneEl = vid.closest('.hyperframe-scene');
+                        var startSec = sceneEl ? parseFloat(sceneEl.getAttribute('data-start') || '0') : 0;
+                        var sceneTime = Math.max(0, timeSec - startSec);
+                        if (vid.duration && !isNaN(vid.duration) && vid.duration > 0) {
+                            var targetVidTime = sceneTime % vid.duration;
+                            if (Math.abs(vid.currentTime - targetVidTime) > 0.3) {
+                                try { vid.currentTime = targetVidTime; } catch(e) {}
+                            }
                         }
-                        break;
+                    }
+                }
+
+                // Notify Android bridge about active scene ONLY during live preview (skipped during export loop)
+                if (!isExport && window.AndroidHyperFrames && typeof window.AndroidHyperFrames.onSceneChange === 'function') {
+                    for (var i = 0; i < cachedScenes.length; i++) {
+                        var sc = cachedScenes[i];
+                        var st = parseFloat(sc.getAttribute('data-start') || '0');
+                        var dur = parseFloat(sc.getAttribute('data-duration') || '5');
+                        if (timeSec >= st && timeSec < (st + dur)) {
+                            var idx = parseInt(sc.getAttribute('data-scene-index') || '0');
+                            var scId = sc.getAttribute('data-scene-id') || '';
+                            window.AndroidHyperFrames.onSceneChange(idx, scId, 'Scene ' + (idx + 1));
+                            break;
+                        }
                     }
                 }
             };
 
             // Notify bridge timeline is ready
             setTimeout(function() {
+                refreshDomCache();
                 autoFit();
                 if (window.AndroidHyperFrames && typeof window.AndroidHyperFrames.onTimelineReady === 'function') {
                     window.AndroidHyperFrames.onTimelineReady($totalDuration, ${project.scenes.size}, '$sceneMetaJson');
                 }
-                window.__hfSeek($currentTimeSec, 0);
+                window.__hfSeek(0, 0, false);
             }, 50);
         })();
     </script>

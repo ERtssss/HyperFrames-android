@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.FolderZip
@@ -68,6 +69,7 @@ fun HyperFramesTopBar(
     canRedo: Boolean,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
+    onNewProject: () -> Unit = {},
     onSelectAspectRatio: (AspectRatioType) -> Unit,
     onOpenCodeEditor: () -> Unit,
     onOpenGallery: () -> Unit,
@@ -134,6 +136,21 @@ fun HyperFramesTopBar(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
+                    // New Project
+                    IconButton(
+                        onClick = onNewProject,
+                        modifier = Modifier
+                            .size(32.dp)
+                            .testTag("btn_new_project")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Новый проект",
+                            tint = StudioAccentLight,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
                     // Undo
                     IconButton(
                         onClick = onUndo,

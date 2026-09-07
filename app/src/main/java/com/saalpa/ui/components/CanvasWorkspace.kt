@@ -154,6 +154,40 @@ fun CanvasWorkspace(
                     }
                 }
 
+                // Empty Scene Canvas Placeholder
+                if (activeScene != null && activeScene.elements.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0x550E1015))
+                                .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(12.dp))
+                                .padding(horizontal = 20.dp, vertical = 14.dp)
+                        ) {
+                            Text(
+                                text = "EMPTY CANVAS",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0x88FFFFFF),
+                                letterSpacing = 1.sp
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Добавьте элементы: текст, медиа, эффекты",
+                                fontSize = 10.sp,
+                                color = Color(0x55FFFFFF)
+                            )
+                        }
+                    }
+                }
+
                 // Active Scene Watermark / Badge (Top Left)
                 if (activeScene != null) {
                     Surface(

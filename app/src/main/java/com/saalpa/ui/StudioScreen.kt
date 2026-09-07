@@ -100,6 +100,7 @@ fun StudioScreen(
                 // Top bar actions
                 onUndo = { viewModel.undo() },
                 onRedo = { viewModel.redo() },
+                onNewProject = { viewModel.createNewProject() },
                 onSelectAspectRatio = { viewModel.setAspectRatio(it) },
                 onOpenCodeEditor = { viewModel.openCodeEditor(true) },
                 onOpenGallery = { viewModel.openGallery(true) },

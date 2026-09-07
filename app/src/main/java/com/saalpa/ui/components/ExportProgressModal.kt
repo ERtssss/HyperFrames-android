@@ -192,8 +192,13 @@ fun ExportProgressModal(
                                 fontSize = 12.sp,
                                 fontFamily = FontFamily.Monospace
                             )
+                            val speedInfo = if (renderState.estimatedRemainingSec > 0) {
+                                String.format(Locale.US, "%.1f FPS (ETA %ds)", renderState.fpsSpeed, renderState.estimatedRemainingSec)
+                            } else {
+                                String.format(Locale.US, "%.1f FPS", renderState.fpsSpeed)
+                            }
                             Text(
-                                text = String.format(Locale.US, "%.1f FPS", renderState.fpsSpeed),
+                                text = speedInfo,
                                 color = EmeraldGreen,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,

@@ -37,6 +37,7 @@ fun HyperFramesStudioLayout(
     // Top bar actions
     onUndo: () -> Unit,
     onRedo: () -> Unit,
+    onNewProject: () -> Unit = {},
     onSelectAspectRatio: (AspectRatioType) -> Unit,
     onOpenCodeEditor: () -> Unit,
     onOpenGallery: () -> Unit,
@@ -60,8 +61,8 @@ fun HyperFramesStudioLayout(
     onSetSceneDuration: (Float) -> Unit,
     onChangeTransition: (sceneId: String, transition: SceneTransitionType) -> Unit,
     onUpdateSceneBg: (String) -> Unit,
-    onToggleSceneAvatar: (Boolean) -> Unit,
-    onUpdateSceneAvatar: (SceneAvatarSettings) -> Unit,
+    onToggleSceneAvatar: (Boolean) -> Unit = {},
+    onUpdateSceneAvatar: ((SceneAvatarSettings) -> Unit)? = null,
     onUpdateSceneVoice: (SceneVoiceSettings) -> Unit,
     // Element actions
     onSelectElement: (String?) -> Unit,
@@ -100,6 +101,7 @@ fun HyperFramesStudioLayout(
                 canRedo = state.canRedo,
                 onUndo = onUndo,
                 onRedo = onRedo,
+                onNewProject = onNewProject,
                 onSelectAspectRatio = onSelectAspectRatio,
                 onOpenCodeEditor = onOpenCodeEditor,
                 onOpenGallery = onOpenGallery,
@@ -131,8 +133,8 @@ fun HyperFramesStudioLayout(
                             onMoveSceneDown = onMoveSceneDown,
                             onUpdateSceneTitle = onUpdateSceneTitle,
                             onUpdateSceneScript = onUpdateSceneScript,
-                            onOpenVoicePanel = { onSelectPanel(StudioActivePanel.AVATAR_VOICE) },
-                            onOpenAvatarPanel = { onSelectPanel(StudioActivePanel.AVATAR_VOICE) }
+                            onOpenVoicePanel = { onSelectPanel(StudioActivePanel.VOICE) },
+                            onOpenAvatarPanel = { onSelectPanel(StudioActivePanel.VOICE) }
                         )
                     }
 
@@ -232,8 +234,8 @@ fun HyperFramesStudioLayout(
                                     onMoveSceneDown = onMoveSceneDown,
                                     onUpdateSceneTitle = onUpdateSceneTitle,
                                     onUpdateSceneScript = onUpdateSceneScript,
-                                    onOpenVoicePanel = { onSelectPanel(StudioActivePanel.AVATAR_VOICE) },
-                                    onOpenAvatarPanel = { onSelectPanel(StudioActivePanel.AVATAR_VOICE) }
+                                    onOpenVoicePanel = { onSelectPanel(StudioActivePanel.VOICE) },
+                                    onOpenAvatarPanel = { onSelectPanel(StudioActivePanel.VOICE) }
                                 )
                             }
                             StudioActivePanel.INSPECTOR -> {
@@ -252,10 +254,9 @@ fun HyperFramesStudioLayout(
                                     onDeselectElement = { onSelectElement(null) }
                                 )
                             }
-                            StudioActivePanel.AVATAR_VOICE -> {
-                                AvatarVoicePanel(
+                            StudioActivePanel.VOICE -> {
+                                VoicePanel(
                                     scene = activeScene,
-                                    onUpdateAvatar = onUpdateSceneAvatar,
                                     onUpdateVoice = onUpdateSceneVoice,
                                     isRecordingVoiceover = state.isRecordingVoiceover,
                                     recordingDurationSec = state.recordingDurationSec,
@@ -283,23 +284,6 @@ fun HyperFramesStudioLayout(
                                     onImportLocalMedia = onImportLocalMedia,
                                     onImportZipArchive = onImportZipArchive,
                                     onAddAssetToScene = onAddAssetToScene
-                                )
-                            }
-                            StudioActivePanel.TEMPLATES -> {
-                                // Direct scene script template shortcuts
-                                ScriptScenePanel(
-                                    project = state.project,
-                                    activeSceneId = state.activeSceneId,
-                                    onSelectScene = onSelectScene,
-                                    onAddScene = onAddScene,
-                                    onDuplicateScene = onDuplicateScene,
-                                    onDeleteScene = onDeleteScene,
-                                    onMoveSceneUp = onMoveSceneUp,
-                                    onMoveSceneDown = onMoveSceneDown,
-                                    onUpdateSceneTitle = onUpdateSceneTitle,
-                                    onUpdateSceneScript = onUpdateSceneScript,
-                                    onOpenVoicePanel = { onSelectPanel(StudioActivePanel.AVATAR_VOICE) },
-                                    onOpenAvatarPanel = { onSelectPanel(StudioActivePanel.AVATAR_VOICE) }
                                 )
                             }
                         }

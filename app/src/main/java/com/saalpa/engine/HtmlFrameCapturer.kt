@@ -30,10 +30,9 @@ class HtmlFrameCapturer(private val context: Context) {
         val loadDeferred = CompletableDeferred<Boolean>()
 
         val wv = WebView(context).apply {
+            setLayerType(View.LAYER_TYPE_SOFTWARE, null)
             layoutParams = ViewGroup.LayoutParams(width, height)
             setBackgroundColor(Color.BLACK)
-            // Software layer ensures reliable offscreen Canvas bitmap capture and avoids headless Mesa DRI rendernode issues
-            setLayerType(View.LAYER_TYPE_SOFTWARE, null)
             setInitialScale(100)
             settings.apply {
                 javaScriptEnabled = true
@@ -82,45 +81,32 @@ class HtmlFrameCapturer(private val context: Context) {
     suspend fun captureFrame(
         timeSec: Float,
         progress: Float,
+        targetCanvas: Canvas
+    ): Unit = withContext(Dispatchers.Main) {
+        val wv = webView ?: throw IllegalStateException("WebView not initialized")
+        val jsDeferred = CompletableDeferred<Unit>()
+
+        // Fast inline JS invocation with isExport=true
+        val jsCode = "if(window.__hfSeek){window.__hfSeek($timeSec,$progress,true);}else if(window.gsap&&window.gsap.globalTimeline){window.gsap.globalTimeline.seek($timeSec,false);}"
+
+        wv.evaluateJavascript(jsCode) {
+            // Draw synchronously directly on Main thread inside JS completion callback
+            wv.draw(targetCanvas)
+            jsDeferred.complete(Unit)
+        }
+        jsDeferred.await()
+    }
+
+    suspend fun captureFrame(
+        timeSec: Float,
+        progress: Float,
         width: Int,
         height: Int,
         reusableBitmap: Bitmap? = null
     ): Bitmap = withContext(Dispatchers.Main) {
-        val wv = webView ?: throw IllegalStateException("WebView not initialized")
-        val jsDeferred = CompletableDeferred<Unit>()
-
-        val jsCode = """
-            if (window.__hfSeek) {
-                window.__hfSeek($timeSec, $progress);
-            } else {
-                if (window.__timelines) {
-                    for (var k in window.__timelines) {
-                        if (window.__timelines[k] && typeof window.__timelines[k].seek === 'function') {
-                            window.__timelines[k].seek($timeSec, false);
-                        }
-                    }
-                }
-                if (typeof window.seekTo === 'function') window.seekTo($timeSec);
-                if (window.gsap && window.gsap.globalTimeline) window.gsap.globalTimeline.seek($timeSec, false);
-                if (window.HyperFrames && window.HyperFrames.seek) window.HyperFrames.seek($timeSec, $progress);
-                document.documentElement.style.setProperty('--time', '${timeSec}s');
-                document.documentElement.style.setProperty('--progress', '$progress');
-            }
-        """.trimIndent()
-
-        wv.evaluateJavascript(jsCode) {
-            jsDeferred.complete(Unit)
-        }
-        jsDeferred.await()
-
-        // Wait for DOM & GSAP repaint
-        delay(12)
-
         val bitmap = reusableBitmap ?: Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        canvas.drawColor(Color.BLACK)
-        wv.draw(canvas)
-
+        captureFrame(timeSec, progress, canvas)
         bitmap
     }
 

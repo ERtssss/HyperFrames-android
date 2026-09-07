@@ -1,6 +1,6 @@
 {
   "name": "HyperFrames",
-  "description": "HTML-to-Video generation studio on Android with live preview, timeline scrubber, custom templates, and hardware-accelerated MP4 rendering.",
+  "description": "Motion graphics video studio on Android with live canvas preview, multi-scene timeline, voiceover recording, and hardware-accelerated MP4 rendering.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

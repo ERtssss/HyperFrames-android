@@ -45,6 +45,7 @@ class HtmlVideoEncoder(
     private var eglCore: EglCore? = null
     private var windowSurface: WindowSurface? = null
     private var textureRenderer: TextureRenderer? = null
+    private var useEgl = false
     private var muxer: MediaMuxer? = null
 
     private var trackIndex = -1
@@ -57,6 +58,9 @@ class HtmlVideoEncoder(
             setInteger(MediaFormat.KEY_BIT_RATE, bitRate)
             setInteger(MediaFormat.KEY_FRAME_RATE, fps)
             setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, I_FRAME_INTERVAL)
+            try {
+                setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR)
+            } catch (_: Throwable) {}
         }
 
         encoder = MediaCodec.createEncoderByType(MIME_TYPE).apply {
@@ -65,10 +69,24 @@ class HtmlVideoEncoder(
             start()
         }
 
-        eglCore = EglCore()
-        windowSurface = WindowSurface(eglCore!!, inputSurface!!)
-        windowSurface?.makeCurrent()
-        textureRenderer = TextureRenderer(width, height)
+        useEgl = false
+        try {
+            val core = EglCore()
+            val winSurf = WindowSurface(core, inputSurface!!)
+            winSurf.makeCurrent()
+            val renderer = TextureRenderer(width, height)
+            eglCore = core
+            windowSurface = winSurf
+            textureRenderer = renderer
+            useEgl = true
+        } catch (e: Throwable) {
+            Log.w(TAG, "EGL hardware pipeline not available, falling back to Surface Canvas: ${e.message}")
+            eglCore?.release()
+            eglCore = null
+            windowSurface = null
+            textureRenderer = null
+            useEgl = false
+        }
 
         muxer = MediaMuxer(outputFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
         isMuxerStarted = false
@@ -78,15 +96,31 @@ class HtmlVideoEncoder(
     fun encodeFrame(bitmap: Bitmap, frameIndex: Int) {
         drainEncoder(endOfStream = false)
 
-        val egl = windowSurface ?: return
-        egl.makeCurrent()
-
-        textureRenderer?.drawBitmap(bitmap)
-
-        // Set presentation time in nanoseconds
         val presentationTimeNs = (frameIndex * 1_000_000_000L) / fps
-        egl.setPresentationTime(presentationTimeNs)
-        egl.swapBuffers()
+
+        if (useEgl && windowSurface != null) {
+            val egl = windowSurface ?: return
+            egl.makeCurrent()
+            textureRenderer?.drawBitmap(bitmap)
+            egl.setPresentationTime(presentationTimeNs)
+            egl.swapBuffers()
+        } else {
+            inputSurface?.let { surface ->
+                val canvas = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    try {
+                        surface.lockHardwareCanvas()
+                    } catch (_: Throwable) {
+                        surface.lockCanvas(null)
+                    }
+                } else {
+                    surface.lockCanvas(null)
+                }
+                canvas?.let { c ->
+                    c.drawBitmap(bitmap, 0f, 0f, null)
+                    surface.unlockCanvasAndPost(c)
+                }
+            }
+        }
     }
 
     fun finish() {
@@ -100,7 +134,8 @@ class HtmlVideoEncoder(
         val enc = encoder ?: return
         val mux = muxer ?: return
 
-        val timeoutUs = 10000L
+        // Use non-blocking timeout during streaming, and 10ms only when waiting for final EOF flush
+        val timeoutUs = if (endOfStream) 10000L else 0L
         while (true) {
             val encoderStatus = enc.dequeueOutputBuffer(bufferInfo, timeoutUs)
             if (encoderStatus == MediaCodec.INFO_TRY_AGAIN_LATER) {
@@ -313,6 +348,12 @@ class HtmlVideoEncoder(
             GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR)
             GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE)
             GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE)
+
+            // Pre-allocate GPU texture storage once
+            GLES20.glTexImage2D(
+                GLES20.GL_TEXTURE_2D, 0, GLES20.GL_RGBA, width, height, 0,
+                GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, null
+            )
         }
 
         fun drawBitmap(bitmap: Bitmap) {
@@ -323,7 +364,7 @@ class HtmlVideoEncoder(
 
             GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, textureId)
-            GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bitmap, 0)
+            GLUtils.texSubImage2D(GLES20.GL_TEXTURE_2D, 0, 0, 0, bitmap)
             GLES20.glUniform1i(uTextureHandle, 0)
 
             triangleVertices.position(0)

@@ -79,7 +79,7 @@ fun ScriptScenePanel(
     onUpdateSceneTitle: (sceneId: String, newTitle: String) -> Unit,
     onUpdateSceneScript: (sceneId: String, newScript: String) -> Unit,
     onOpenVoicePanel: (sceneId: String) -> Unit,
-    onOpenAvatarPanel: (sceneId: String) -> Unit,
+    onOpenAvatarPanel: (sceneId: String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -162,8 +162,7 @@ fun ScriptScenePanel(
                     onMoveDown = { onMoveSceneDown(scene.id) },
                     onUpdateTitle = { onUpdateSceneTitle(scene.id, it) },
                     onUpdateScript = { onUpdateSceneScript(scene.id, it) },
-                    onOpenVoice = { onOpenVoicePanel(scene.id) },
-                    onOpenAvatar = { onOpenAvatarPanel(scene.id) }
+                    onOpenVoice = { onOpenVoicePanel(scene.id) }
                 )
             }
         }
@@ -184,8 +183,7 @@ private fun ScriptSceneCard(
     onMoveDown: () -> Unit,
     onUpdateTitle: (String) -> Unit,
     onUpdateScript: (String) -> Unit,
-    onOpenVoice: () -> Unit,
-    onOpenAvatar: () -> Unit
+    onOpenVoice: () -> Unit
 ) {
     var isEditingTitle by remember { mutableStateOf(false) }
     var titleText by remember(scene.title) { mutableStateOf(scene.title) }
@@ -327,30 +325,6 @@ private fun ScriptSceneCard(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Avatar Chip
-                    Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(StudioSurface)
-                            .border(0.5.dp, StudioBorderSubtle, RoundedCornerShape(12.dp))
-                            .clickable(onClick = onOpenAvatar)
-                            .padding(horizontal = 6.dp, vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Person,
-                            contentDescription = "Аватар",
-                            tint = StudioPurple,
-                            modifier = Modifier.size(11.dp)
-                        )
-                        Spacer(modifier = Modifier.width(3.dp))
-                        Text(
-                            text = scene.avatar.characterName.split(" ").first(),
-                            fontSize = 9.5.sp,
-                            color = StudioTextSecondary
-                        )
-                    }
-
                     // Voice Chip
                     Row(
                         modifier = Modifier
@@ -373,6 +347,24 @@ private fun ScriptSceneCard(
                             fontSize = 9.5.sp,
                             color = StudioTextSecondary
                         )
+                    }
+
+                    // Elements count chip
+                    if (scene.elements.isNotEmpty()) {
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(StudioSurface)
+                                .border(0.5.dp, StudioBorderSubtle, RoundedCornerShape(12.dp))
+                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Элементов: ${scene.elements.size}",
+                                fontSize = 9.5.sp,
+                                color = StudioTextMuted
+                            )
+                        }
                     }
                 }
 
