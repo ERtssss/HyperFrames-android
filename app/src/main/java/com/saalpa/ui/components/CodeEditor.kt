@@ -15,21 +15,27 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Css
 import androidx.compose.material.icons.filled.Html
 import androidx.compose.material.icons.filled.Javascript
-import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
@@ -37,6 +43,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -52,16 +59,17 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.saalpa.model.project.HyperFrameScene
 import com.saalpa.ui.theme.StudioAccent
 import com.saalpa.ui.theme.StudioAccentLight
 import com.saalpa.ui.theme.StudioBg
 import com.saalpa.ui.theme.StudioBorder
 import com.saalpa.ui.theme.StudioBorderSubtle
-import com.saalpa.ui.theme.StudioDanger
 import com.saalpa.ui.theme.StudioPink
 import com.saalpa.ui.theme.StudioSky
 import com.saalpa.ui.theme.StudioSuccess
 import com.saalpa.ui.theme.StudioSurface
+import com.saalpa.ui.theme.StudioSurfaceElevated
 import com.saalpa.ui.theme.StudioSurfaceVariant
 import com.saalpa.ui.theme.StudioTextMuted
 import com.saalpa.ui.theme.StudioTextPrimary
@@ -69,19 +77,32 @@ import com.saalpa.ui.theme.StudioTextSecondary
 
 @Composable
 fun CodeEditor(
+    sceneId: String,
+    sceneTitle: String,
+    scenes: List<HyperFrameScene>,
     html: String,
     css: String,
     js: String,
     isModified: Boolean,
     onCodeChange: (html: String, css: String, js: String) -> Unit,
-    onReset: () -> Unit,
+    onSaveCode: () -> Unit,
+    onSelectScene: (String) -> Unit,
     onBackToStudio: () -> Unit,
+    previewContent: @Composable () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var selectedTabIndex by remember { mutableIntStateOf(0) }
-    val tabs = listOf("HTML / DOM", "CSS Styles", "GSAP / JavaScript")
+    var selectedTabIndex by remember { mutableIntStateOf(0) } // 0: HTML, 1: CSS, 2: JS
+    var isPreviewActive by remember { mutableStateOf(false) }
+    var showSceneDropdown by remember { mutableStateOf(false) }
+    val tabs = listOf("HTML", "CSS", "JS")
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
+
+    val currentFileName = when (selectedTabIndex) {
+        0 -> "scenes/$sceneId/index.html"
+        1 -> "scenes/$sceneId/style.css"
+        else -> "scenes/$sceneId/script.js"
+    }
 
     val currentCode = when (selectedTabIndex) {
         0 -> html
@@ -91,22 +112,21 @@ fun CodeEditor(
 
     val currentSnippets = when (selectedTabIndex) {
         0 -> listOf(
-            "<div class=\"scene\" id=\"scene-0\">",
-            "<div class=\"layer badge\">",
-            "<h1 class=\"headline\">",
-            "<div class=\"avatar-frame\">",
-            "<img src=\"...\" />"
+            "<div class=\"headline\">Text</div>",
+            "<h1 class=\"title\">Hello</h1>",
+            "<p class=\"desc\">Content</p>",
+            "<img src=\"assets/image.png\" class=\"media\" />"
         )
         1 -> listOf(
-            "var(--progress)",
-            "animation: pulse 2s infinite;",
-            "backdrop-filter: blur(12px);",
-            "box-shadow: 0 0 24px rgba(79, 70, 229, 0.4);"
+            "animation: fadeIn 1s ease-out;",
+            "backdrop-filter: blur(10px);",
+            "transform: translate(-50%, -50%);",
+            "box-shadow: 0 0 40px rgba(0,0,0,0.8);"
         )
         else -> listOf(
-            "gsap.to('.scene', { opacity: 1, duration: 0.5 })",
-            "gsap.timeline({ paused: true })",
-            "window.HyperFrames.onSceneChange(0, 'scene-0', 'Intro')"
+            "gsap.to('.title', { opacity: 1, y: 0, duration: 1 });",
+            "console.log('Scene active');",
+            "gsap.from('.headline', { scale: 0.8, duration: 0.5 });"
         )
     }
 
@@ -114,176 +134,173 @@ fun CodeEditor(
         modifier = modifier
             .fillMaxSize()
             .background(StudioBg)
+            .statusBarsPadding()
     ) {
-        // Top Action Bar
+        // Top Bar: [ ← Code ]   [ HTML | CSS | JS ]
         Surface(
             modifier = Modifier.fillMaxWidth(),
             color = StudioSurface,
             shadowElevation = 4.dp
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(
-                        onClick = onBackToStudio,
-                        modifier = Modifier.size(36.dp).testTag("code_editor_back")
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Назад в студию",
-                            tint = StudioAccentLight
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Column {
-                        Text(
-                            text = "HYPERFRAMES CODE IDE",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = StudioTextPrimary,
-                            letterSpacing = 0.5.sp
-                        )
-                        Text(
-                            text = if (isModified) "Пользовательский код активен" else "Авто-генерация на базе композиций сцен",
-                            fontSize = 9.sp,
-                            color = if (isModified) StudioSuccess else StudioTextMuted
-                        )
-                    }
-                }
-
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    // Copy code button
-                    IconButton(
-                        onClick = {
-                            clipboardManager.setText(AnnotatedString(currentCode))
-                            Toast.makeText(context, "Код скопирован в буфер", Toast.LENGTH_SHORT).show()
-                        },
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.ContentCopy,
-                            contentDescription = "Копировать",
-                            tint = StudioTextSecondary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-
-                    // Reset button
-                    if (isModified) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Left: Back button and scene picker
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(
-                            onClick = {
-                                onReset()
-                                Toast.makeText(context, "Код сброшен к композиции проекта", Toast.LENGTH_SHORT).show()
-                            },
-                            modifier = Modifier.size(32.dp)
+                            onClick = onBackToStudio,
+                            modifier = Modifier.size(34.dp).testTag("code_editor_back")
                         ) {
                             Icon(
-                                imageVector = Icons.Default.RestartAlt,
-                                contentDescription = "Сбросить к оригиналу",
-                                tint = StudioDanger,
-                                modifier = Modifier.size(18.dp)
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Назад",
+                                tint = StudioAccentLight
                             )
+                        }
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Box {
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(StudioSurfaceVariant)
+                                    .border(1.dp, StudioBorderSubtle, RoundedCornerShape(6.dp))
+                                    .clickable { showSceneDropdown = true }
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = sceneTitle,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = StudioTextPrimary
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "▾",
+                                    fontSize = 10.sp,
+                                    color = StudioTextMuted
+                                )
+                            }
+
+                            DropdownMenu(
+                                expanded = showSceneDropdown,
+                                onDismissRequest = { showSceneDropdown = false },
+                                modifier = Modifier.background(StudioSurfaceElevated)
+                            ) {
+                                scenes.forEach { sc ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                text = "${sc.title} (${sc.id})",
+                                                color = if (sc.id == sceneId) StudioAccentLight else StudioTextPrimary,
+                                                fontWeight = if (sc.id == sceneId) FontWeight.Bold else FontWeight.Normal,
+                                                fontSize = 12.sp
+                                            )
+                                        },
+                                        onClick = {
+                                            onSelectScene(sc.id)
+                                            showSceneDropdown = false
+                                        }
+                                    )
+                                }
+                            }
                         }
                     }
 
-                    // Done/Apply button
-                    Button(
-                        onClick = {
-                            onBackToStudio()
-                            Toast.makeText(context, "Код применен", Toast.LENGTH_SHORT).show()
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = StudioAccent,
-                            contentColor = Color.White
-                        ),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 0.dp),
-                        shape = RoundedCornerShape(6.dp),
-                        modifier = Modifier.height(30.dp)
-                    ) {
-                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Применить", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        }
-
-        // Language Tabs (HTML, CSS, JS)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(StudioSurface)
-                .padding(horizontal = 10.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            tabs.forEachIndexed { index, title ->
-                val isSelected = selectedTabIndex == index
-                val tabColor = when (index) {
-                    0 -> StudioPink
-                    1 -> StudioSky
-                    else -> StudioAccentLight
-                }
-
-                Surface(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(6.dp))
-                        .clickable { selectedTabIndex = index }
-                        .testTag("code_tab_$title"),
-                    color = if (isSelected) tabColor.copy(alpha = 0.15f) else StudioSurfaceVariant,
-                    border = androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        if (isSelected) tabColor else StudioBorderSubtle
-                    ),
-                    shape = RoundedCornerShape(6.dp)
-                ) {
+                    // Center/Right: [ HTML ] [ CSS ] [ JS ] Tabs
                     Row(
-                        modifier = Modifier.padding(vertical = 7.dp),
-                        horizontalArrangement = Arrangement.Center,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = when (index) {
-                                0 -> Icons.Default.Html
-                                1 -> Icons.Default.Css
-                                else -> Icons.Default.Javascript
+                        tabs.forEachIndexed { index, title ->
+                            val isSelected = selectedTabIndex == index
+                            val tabColor = when (index) {
+                                0 -> StudioPink
+                                1 -> StudioSky
+                                else -> StudioAccentLight
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(if (isSelected) tabColor.copy(alpha = 0.2f) else StudioSurfaceVariant)
+                                    .border(1.dp, if (isSelected) tabColor else StudioBorderSubtle, RoundedCornerShape(6.dp))
+                                    .clickable { selectedTabIndex = index }
+                                    .padding(horizontal = 10.dp, vertical = 5.dp)
+                                    .testTag("tab_$title"),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = title,
+                                    fontSize = 11.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (isSelected) tabColor else StudioTextSecondary
+                                )
+                            }
+                        }
+
+                        // Copy Button
+                        IconButton(
+                            onClick = {
+                                clipboardManager.setText(AnnotatedString(currentCode))
+                                Toast.makeText(context, "Скопировано", Toast.LENGTH_SHORT).show()
                             },
-                            contentDescription = null,
-                            tint = if (isSelected) tabColor else StudioTextMuted,
-                            modifier = Modifier.size(15.dp)
-                        )
-                        Spacer(modifier = Modifier.width(5.dp))
-                        Text(
-                            text = title,
-                            fontSize = 11.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                            color = if (isSelected) tabColor else StudioTextMuted
-                        )
+                            modifier = Modifier.size(30.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ContentCopy,
+                                contentDescription = "Копировать",
+                                tint = StudioTextMuted,
+                                modifier = Modifier.size(15.dp)
+                            )
+                        }
                     }
+                }
+
+                // File path bar
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(StudioSurfaceElevated)
+                        .padding(horizontal = 12.dp, vertical = 3.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = currentFileName,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 10.5.sp,
+                        color = StudioTextSecondary
+                    )
+                    Text(
+                        text = if (isModified) "Файл изменён (автосохранение активно)" else "Сохранено на диске",
+                        fontSize = 9.5.sp,
+                        color = if (isModified) StudioAccentLight else StudioSuccess
+                    )
                 }
             }
         }
 
-        // Quick Snippets Bar
+        // Quick Snippets
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(StudioSurface)
-                .padding(horizontal = 10.dp, vertical = 4.dp)
+                .padding(horizontal = 8.dp, vertical = 4.dp)
                 .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             currentSnippets.forEach { snippet ->
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
+                        .clip(RoundedCornerShape(4.dp))
                         .background(StudioSurfaceVariant)
-                        .border(1.dp, StudioBorderSubtle, RoundedCornerShape(6.dp))
+                        .border(1.dp, StudioBorderSubtle, RoundedCornerShape(4.dp))
                         .clickable {
                             when (selectedTabIndex) {
                                 0 -> onCodeChange(html + "\n" + snippet, css, js)
@@ -291,11 +308,11 @@ fun CodeEditor(
                                 2 -> onCodeChange(html, css, js + "\n" + snippet)
                             }
                         }
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                        .padding(horizontal = 6.dp, vertical = 3.dp)
                 ) {
                     Text(
                         text = snippet,
-                        fontSize = 10.sp,
+                        fontSize = 9.5.sp,
                         fontFamily = FontFamily.Monospace,
                         color = StudioAccentLight
                     )
@@ -303,40 +320,108 @@ fun CodeEditor(
             }
         }
 
-        // Full Screen Code Text Area (without video preview and without tracks!)
+        // Main Editor or Split Preview Area
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .padding(horizontal = 10.dp, vertical = 6.dp)
         ) {
-            OutlinedTextField(
-                value = currentCode,
-                onValueChange = { newText ->
-                    when (selectedTabIndex) {
-                        0 -> onCodeChange(newText, css, js)
-                        1 -> onCodeChange(html, newText, js)
-                        2 -> onCodeChange(html, css, newText)
+            if (isPreviewActive) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .background(Color.Black)
+                    ) {
+                        previewContent()
                     }
-                },
-                textStyle = TextStyle(
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 12.sp,
-                    lineHeight = 18.sp,
-                    color = StudioTextPrimary
-                ),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = StudioAccent,
-                    unfocusedBorderColor = StudioBorder,
-                    focusedContainerColor = StudioSurfaceVariant,
-                    unfocusedContainerColor = StudioSurfaceVariant,
-                    cursorColor = StudioAccentLight
-                ),
-                shape = RoundedCornerShape(8.dp),
+                }
+            } else {
+                OutlinedTextField(
+                    value = currentCode,
+                    onValueChange = { newText ->
+                        when (selectedTabIndex) {
+                            0 -> onCodeChange(newText, css, js)
+                            1 -> onCodeChange(html, newText, js)
+                            2 -> onCodeChange(html, css, newText)
+                        }
+                    },
+                    textStyle = TextStyle(
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 12.sp,
+                        lineHeight = 18.sp,
+                        color = StudioTextPrimary
+                    ),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color.Transparent,
+                        unfocusedBorderColor = Color.Transparent,
+                        focusedContainerColor = StudioSurfaceVariant,
+                        unfocusedContainerColor = StudioSurfaceVariant,
+                        cursorColor = StudioAccentLight
+                    ),
+                    shape = RoundedCornerShape(0.dp),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .testTag("code_editor_input")
+                )
+            }
+        }
+
+        // Bottom Action Bar: [ Save ]                     [ Preview ]
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = StudioSurface,
+            shadowElevation = 6.dp
+        ) {
+            Row(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .testTag("code_editor_input")
-            )
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Save Button (Immediately writes to filesystem)
+                Button(
+                    onClick = {
+                        onSaveCode()
+                        Toast.makeText(context, "Файлы сохранены в HF-projects/", Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = StudioAccent,
+                        contentColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.height(36.dp).testTag("btn_save_code")
+                ) {
+                    Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(15.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Save", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+
+                // Preview Button (Toggles live preview of the HTML/CSS/JS)
+                OutlinedButton(
+                    onClick = { isPreviewActive = !isPreviewActive },
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = if (isPreviewActive) StudioAccent.copy(alpha = 0.15f) else Color.Transparent,
+                        contentColor = if (isPreviewActive) StudioAccentLight else StudioTextPrimary
+                    ),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        if (isPreviewActive) StudioAccent else StudioBorder
+                    ),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.height(36.dp).testTag("btn_preview_toggle")
+                ) {
+                    Icon(
+                        imageVector = if (isPreviewActive) Icons.Default.Close else Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(if (isPreviewActive) "Код" else "Preview", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
         }
     }
 }

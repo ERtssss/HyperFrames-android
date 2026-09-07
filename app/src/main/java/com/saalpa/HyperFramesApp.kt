@@ -12,14 +12,13 @@ class HyperFramesApp : Application() {
 
         private fun configureMesaEnvironment() {
             try {
-                // Configure Mesa driver to use software rasterizer in environments without hardware DRM render nodes (/dev/dri/renderD128)
+                // Configure graphics environment for cloud emulator/container setups without hardware DRM rendernode (/dev/dri/renderD128)
                 Os.setenv("LIBGL_ALWAYS_SOFTWARE", "1", true)
                 Os.setenv("MESA_LOADER_DRIVER_OVERRIDE", "swrast", true)
-                Os.setenv("GALLIUM_DRIVER", "softpipe", true)
-                Os.setenv("MESA_DEBUG", "silent", true)
-                Os.setenv("MESA_LOG_FILE", "/dev/null", true)
-                Os.setenv("EGL_LOG_LEVEL", "fatal", true)
+                Os.setenv("GALLIUM_DRIVER", "llvmpipe", true)
+                Os.setenv("MESA_NO_ERROR", "1", true)
                 Os.setenv("LIBGL_DRI3_DISABLE", "1", true)
+                Os.setenv("EGL_LOG_LEVEL", "fatal", true)
             } catch (e: Throwable) {
                 Log.d("HyperFramesApp", "Environment configuration: ${e.message}")
             }

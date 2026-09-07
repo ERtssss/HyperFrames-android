@@ -40,6 +40,8 @@ fun HyperFramesStudioLayout(
     onNewProject: () -> Unit = {},
     onSelectAspectRatio: (AspectRatioType) -> Unit,
     onOpenCodeEditor: () -> Unit,
+    onOpenProjectManager: () -> Unit = {},
+    onOpenCodeFile: (sceneId: String, tabIndex: Int) -> Unit = { _, _ -> },
     onOpenGallery: () -> Unit,
     onOpenExplainer: () -> Unit,
     onExportClick: () -> Unit,
@@ -92,20 +94,20 @@ fun HyperFramesStudioLayout(
         val isWide = maxWidth > 720.dp
 
         Column(modifier = Modifier.fillMaxSize()) {
-            // Desktop-style Top Bar
+            // Compact Modern Top Bar
             HyperFramesTopBar(
                 projectName = state.project.name,
                 aspectRatio = state.project.aspectRatio,
-                resolution = state.project.resolution,
+                isPlaying = state.isPlaying,
                 canUndo = state.canUndo,
                 canRedo = state.canRedo,
                 onUndo = onUndo,
                 onRedo = onRedo,
-                onNewProject = onNewProject,
+                onTogglePlay = onTogglePlay,
+                onNewClick = onAddScene,
                 onSelectAspectRatio = onSelectAspectRatio,
                 onOpenCodeEditor = onOpenCodeEditor,
-                onOpenGallery = onOpenGallery,
-                onOpenExplainer = onOpenExplainer,
+                onOpenProjectManager = onOpenProjectManager,
                 onExportClick = onExportClick
             )
 
@@ -222,7 +224,7 @@ fun HyperFramesStudioLayout(
                             .weight(0.54f)
                     ) {
                         when (state.activePanel) {
-                            StudioActivePanel.SCRIPT -> {
+                            StudioActivePanel.SCENES, StudioActivePanel.SCRIPT -> {
                                 ScriptScenePanel(
                                     project = state.project,
                                     activeSceneId = state.activeSceneId,
@@ -236,6 +238,13 @@ fun HyperFramesStudioLayout(
                                     onUpdateSceneScript = onUpdateSceneScript,
                                     onOpenVoicePanel = { onSelectPanel(StudioActivePanel.VOICE) },
                                     onOpenAvatarPanel = { onSelectPanel(StudioActivePanel.VOICE) }
+                                )
+                            }
+                            StudioActivePanel.FILES -> {
+                                ProjectFilesView(
+                                    project = state.project,
+                                    currentProjectDir = state.currentProjectDir,
+                                    onOpenCodeFile = onOpenCodeFile
                                 )
                             }
                             StudioActivePanel.INSPECTOR -> {

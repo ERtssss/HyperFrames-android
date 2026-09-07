@@ -21,11 +21,10 @@ import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.Code
-import androidx.compose.material.icons.filled.FolderZip
-import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.IosShare
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
@@ -44,12 +43,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.saalpa.model.AspectRatioType
-import com.saalpa.model.RenderResolution
 import com.saalpa.ui.theme.StudioAccent
 import com.saalpa.ui.theme.StudioAccentLight
 import com.saalpa.ui.theme.StudioBorder
@@ -60,20 +57,24 @@ import com.saalpa.ui.theme.StudioTextMuted
 import com.saalpa.ui.theme.StudioTextPrimary
 import com.saalpa.ui.theme.StudioTextSecondary
 
+/**
+ * Compact top bar following the HyperFrames design:
+ * [ HYPER  +  ↶ ↷   16:9   </>   ▶   Export ]
+ */
 @Composable
 fun HyperFramesTopBar(
     projectName: String,
     aspectRatio: AspectRatioType,
-    resolution: RenderResolution,
+    isPlaying: Boolean,
     canUndo: Boolean,
     canRedo: Boolean,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
-    onNewProject: () -> Unit = {},
+    onTogglePlay: () -> Unit,
+    onNewClick: () -> Unit,
     onSelectAspectRatio: (AspectRatioType) -> Unit,
     onOpenCodeEditor: () -> Unit,
-    onOpenGallery: () -> Unit,
-    onOpenExplainer: () -> Unit,
+    onOpenProjectManager: () -> Unit,
     onExportClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -84,128 +85,112 @@ fun HyperFramesTopBar(
             .fillMaxWidth()
             .statusBarsPadding(),
         color = StudioSurface,
-        shadowElevation = 6.dp
+        shadowElevation = 4.dp
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                    .padding(horizontal = 6.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Left: Studio Brand & Project Name
+                // Left: HYPER badge & Project Name (Clicking opens Project Manager)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f, fill = false)
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable { onOpenProjectManager() }
+                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                        .testTag("btn_project_manager")
                 ) {
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
+                            .clip(RoundedCornerShape(4.dp))
                             .background(StudioAccent)
-                            .padding(horizontal = 6.dp, vertical = 3.dp),
+                            .padding(horizontal = 5.dp, vertical = 3.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = "HYPER",
                             color = Color.White,
-                            fontSize = 11.sp,
+                            fontSize = 10.5.sp,
                             fontWeight = FontWeight.Black,
                             letterSpacing = 0.5.sp
                         )
                     }
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Column {
-                        Text(
-                            text = projectName,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = StudioTextPrimary,
-                            maxLines = 1
-                        )
-                        Text(
-                            text = "Studio • ${aspectRatio.label} • ${resolution.label}",
-                            fontSize = 9.5.sp,
-                            color = StudioTextMuted
-                        )
-                    }
+                    Spacer(modifier = Modifier.width(5.dp))
+                    Text(
+                        text = projectName,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = StudioTextPrimary,
+                        maxLines = 1
+                    )
                 }
 
-                // Center / Right Actions
+                // Middle / Actions: +  ↶ ↷  16:9  </>  ▶  Export
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    horizontalArrangement = Arrangement.spacedBy(1.dp)
                 ) {
-                    // New Project
+                    // + Button (Add Scene / New)
                     IconButton(
-                        onClick = onNewProject,
-                        modifier = Modifier
-                            .size(32.dp)
-                            .testTag("btn_new_project")
+                        onClick = onNewClick,
+                        modifier = Modifier.size(30.dp).testTag("btn_top_add")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Add,
-                            contentDescription = "Новый проект",
+                            contentDescription = "Добавить",
                             tint = StudioAccentLight,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(17.dp)
                         )
                     }
 
-                    // Undo
+                    // ↶ Undo
                     IconButton(
                         onClick = onUndo,
                         enabled = canUndo,
-                        modifier = Modifier
-                            .size(32.dp)
-                            .testTag("btn_undo")
+                        modifier = Modifier.size(28.dp).testTag("btn_undo")
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Undo,
                             contentDescription = "Отменить",
-                            tint = if (canUndo) StudioTextPrimary else StudioTextMuted,
-                            modifier = Modifier.size(16.dp)
+                            tint = if (canUndo) StudioTextPrimary else StudioTextMuted.copy(alpha = 0.4f),
+                            modifier = Modifier.size(15.dp)
                         )
                     }
 
-                    // Redo
+                    // ↷ Redo
                     IconButton(
                         onClick = onRedo,
                         enabled = canRedo,
-                        modifier = Modifier
-                            .size(32.dp)
-                            .testTag("btn_redo")
+                        modifier = Modifier.size(28.dp).testTag("btn_redo")
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Redo,
                             contentDescription = "Повторить",
-                            tint = if (canRedo) StudioTextPrimary else StudioTextMuted,
-                            modifier = Modifier.size(16.dp)
+                            tint = if (canRedo) StudioTextPrimary else StudioTextMuted.copy(alpha = 0.4f),
+                            modifier = Modifier.size(15.dp)
                         )
                     }
 
-                    // Aspect Ratio Picker
+                    // 16:9 Aspect Ratio
                     Box {
                         Row(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
+                                .clip(RoundedCornerShape(4.dp))
                                 .background(StudioSurfaceVariant)
-                                .border(1.dp, StudioBorder, RoundedCornerShape(6.dp))
+                                .border(1.dp, StudioBorder, RoundedCornerShape(4.dp))
                                 .clickable { showRatioMenu = true }
-                                .padding(horizontal = 8.dp, vertical = 5.dp)
+                                .padding(horizontal = 6.dp, vertical = 4.dp)
                                 .testTag("btn_aspect_ratio"),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.AspectRatio,
-                                contentDescription = "Формат",
-                                tint = StudioAccentLight,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
                             Text(
                                 text = aspectRatio.label,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Bold,
                                 color = StudioTextPrimary
                             )
                         }
@@ -221,7 +206,7 @@ fun HyperFramesTopBar(
                                         Text(
                                             text = "${ratio.title} (${ratio.label})",
                                             color = if (ratio == aspectRatio) StudioAccentLight else StudioTextPrimary,
-                                            fontSize = 12.sp,
+                                            fontSize = 11.5.sp,
                                             fontWeight = if (ratio == aspectRatio) FontWeight.Bold else FontWeight.Normal
                                         )
                                     },
@@ -234,57 +219,55 @@ fun HyperFramesTopBar(
                         }
                     }
 
-                    // Code IDE button
+                    Spacer(modifier = Modifier.width(2.dp))
+
+                    // </> Code Button (HTML / CSS / JS)
                     IconButton(
                         onClick = onOpenCodeEditor,
-                        modifier = Modifier
-                            .size(32.dp)
-                            .testTag("btn_open_code")
+                        modifier = Modifier.size(30.dp).testTag("btn_open_code")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Code,
-                            contentDescription = "Код IDE",
+                            contentDescription = "Редактор кода",
                             tint = StudioAccentLight,
+                            modifier = Modifier.size(17.dp)
+                        )
+                    }
+
+                    // ▶ Play / Pause Button
+                    IconButton(
+                        onClick = onTogglePlay,
+                        modifier = Modifier.size(30.dp).testTag("btn_top_play")
+                    ) {
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = if (isPlaying) "Пауза" else "Воспроизведение",
+                            tint = if (isPlaying) StudioAccentLight else StudioTextPrimary,
                             modifier = Modifier.size(18.dp)
                         )
                     }
 
-                    // Gallery button
-                    IconButton(
-                        onClick = onOpenGallery,
-                        modifier = Modifier
-                            .size(32.dp)
-                            .testTag("btn_open_gallery")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.VideoLibrary,
-                            contentDescription = "Галерея видео",
-                            tint = StudioTextSecondary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-
-                    // Export / Render button
+                    // Export Button
                     Button(
                         onClick = onExportClick,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = StudioAccent,
                             contentColor = Color.White
                         ),
-                        shape = RoundedCornerShape(6.dp),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                        shape = RoundedCornerShape(5.dp),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                         modifier = Modifier
-                            .height(30.dp)
+                            .height(28.dp)
                             .testTag("btn_export")
                     ) {
                         Icon(
                             imageVector = Icons.Default.IosShare,
-                            contentDescription = "Экспорт",
-                            modifier = Modifier.size(13.dp)
+                            contentDescription = null,
+                            modifier = Modifier.size(12.dp)
                         )
-                        Spacer(modifier = Modifier.width(4.dp))
+                        Spacer(modifier = Modifier.width(3.dp))
                         Text(
-                            text = "Экспорт",
+                            text = "Export",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold
                         )

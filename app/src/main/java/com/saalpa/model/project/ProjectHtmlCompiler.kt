@@ -20,12 +20,33 @@ object ProjectHtmlCompiler {
         val totalDuration = project.totalDurationSec
         val scenesHtml = StringBuilder()
         val gsapTimelines = StringBuilder()
+        val sceneStyles = StringBuilder()
+        val sceneScripts = StringBuilder()
 
         var currentSceneStart = 0f
 
         project.scenes.forEachIndexed { index, scene ->
             val sceneDuration = scene.durationSec
             val sceneEnd = currentSceneStart + sceneDuration
+
+            // Include scene custom CSS
+            if (scene.composition.customCss.isNotBlank()) {
+                sceneStyles.append("\n/* Scene ${scene.id} Styles */\n")
+                sceneStyles.append(scene.composition.customCss).append("\n")
+            }
+
+            // Include scene custom JS
+            if (scene.composition.customJs.isNotBlank()) {
+                sceneScripts.append("""
+                    try {
+                        (function(sceneEl, sceneId) {
+                            ${scene.composition.customJs}
+                        })(document.getElementById('scene-${scene.id}'), '${scene.id}');
+                    } catch(err) {
+                        console.error('Error executing script in scene ${scene.id}:', err);
+                    }
+                """.trimIndent()).append("\n")
+            }
 
             // Build Scene Elements HTML
             val elementsHtml = StringBuilder()
@@ -266,6 +287,9 @@ object ProjectHtmlCompiler {
         }
         .anim-bounce { animation: animPulse 2s infinite ease-in-out; }
         .anim-glitch { animation: animGlitch 0.4s infinite linear; }
+
+        /* Scene-specific styles loaded directly from style.css */
+        $sceneStyles
     </style>
 </head>
 <body>
@@ -307,6 +331,9 @@ object ProjectHtmlCompiler {
             }
             var tl = gsap.timeline({ paused: true });
             $gsapTimelines
+
+            // Scene-specific scripts loaded directly from script.js
+            $sceneScripts
 
             window.__hfTl = tl;
             window.__timelines = { main: tl };
@@ -367,6 +394,91 @@ object ProjectHtmlCompiler {
                 }
                 window.__hfSeek(0, 0, false);
             }, 50);
+        })();
+    </script>
+</body>
+</html>
+        """.trimIndent()
+    }
+
+    /**
+     * Compiles an individual scene in isolation for instant Code Editor preview.
+     */
+    fun compileScene(scene: HyperFrameScene, project: HyperFramesProject): String {
+        val (targetW, targetH) = project.getEffectiveDimensions()
+        val bg = if (scene.composition.backgroundGradient.isNotBlank()) scene.composition.backgroundGradient else scene.composition.backgroundColor
+
+        return """
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>${scene.title}</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&family=Montserrat:wght@700;900&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #000000;
+            color: #ffffff;
+            font-family: 'Inter', -apple-system, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #scene-stage {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #scene-container {
+            position: absolute;
+            width: ${targetW}px;
+            height: ${targetH}px;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            overflow: hidden;
+            background: $bg;
+            box-shadow: 0 0 50px rgba(0,0,0,0.8);
+        }
+        ${scene.composition.customCss}
+    </style>
+</head>
+<body>
+    <div id="scene-stage">
+        <div id="scene-container">
+            ${scene.composition.customHtml}
+        </div>
+    </div>
+    <script>
+        (function() {
+            function autoFit() {
+                var comp = document.getElementById('scene-container');
+                if (!comp) return;
+                var stage = document.getElementById('scene-stage') || document.body;
+                var scale = Math.min(stage.clientWidth / $targetW, stage.clientHeight / $targetH);
+                comp.style.transform = 'translate(-50%, -50%) scale(' + scale + ')';
+            }
+            window.addEventListener('resize', autoFit);
+            document.addEventListener('DOMContentLoaded', autoFit);
+            autoFit();
+
+            try {
+                ${scene.composition.customJs}
+            } catch(e) {
+                console.error("Error running scene script:", e);
+            }
         })();
     </script>
 </body>

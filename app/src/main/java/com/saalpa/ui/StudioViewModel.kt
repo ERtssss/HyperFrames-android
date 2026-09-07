@@ -6,6 +6,8 @@ import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.saalpa.data.HFProjectSummary
+import com.saalpa.data.HFProjectsStorageManager
 import com.saalpa.data.ImportedZipAsset
 import com.saalpa.data.VideoStorageManager
 import com.saalpa.data.VoiceoverAudioService
@@ -34,6 +36,7 @@ import com.saalpa.model.project.SceneComposition
 import com.saalpa.model.project.SceneTransitionType
 import com.saalpa.model.project.SceneVoiceSettings
 import com.saalpa.ui.components.StudioActivePanel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,15 +46,20 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Stack
 import java.util.UUID
 
 data class StudioUiState(
     val project: HyperFramesProject = DefaultProjectFactory.createDefaultProject(),
-    val activeSceneId: String? = "scene_01",
+    val currentProjectDir: File? = null,
+    val projectSummaries: List<HFProjectSummary> = emptyList(),
+    val isProjectManagerOpen: Boolean = false,
+    val isCodeModified: Boolean = false,
+    val activeSceneId: String? = "scene-01",
     val selectedElementId: String? = null,
-    val activePanel: StudioActivePanel = StudioActivePanel.SCRIPT,
+    val activePanel: StudioActivePanel = StudioActivePanel.SCENES,
 
     // Playback & Timing
     val currentTimeSec: Float = 0f,
@@ -100,6 +108,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     private val storageManager = VideoStorageManager(context)
     private val voiceoverService = VoiceoverAudioService(context)
     private val zipMediaManager = ZipMediaManager(context)
+    val projectFileManager = HFProjectsStorageManager(context)
 
     private val undoStack = Stack<HyperFramesProject>()
     private val redoStack = Stack<HyperFramesProject>()
@@ -109,6 +118,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     private var playbackJob: Job? = null
     private var renderJob: Job? = null
+    private var autosaveJob: Job? = null
 
     val jsBridge = HyperFramesJsBridge(
         onTimelineReadyListener = { durationSec, totalScenes, json ->
@@ -124,12 +134,31 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     )
 
     init {
-        val starter = DefaultProjectFactory.createDefaultProject()
-        _uiState.update {
-            it.copy(
-                project = starter,
-                activeSceneId = starter.scenes.firstOrNull()?.id
-            )
+        viewModelScope.launch(Dispatchers.IO) {
+            projectFileManager.ensureStorageInitialized()
+            val summaries = projectFileManager.listProjects()
+            val firstSummary = summaries.firstOrNull()
+            if (firstSummary != null) {
+                try {
+                    val loaded = projectFileManager.loadProject(firstSummary.dir)
+                    val firstScene = loaded.scenes.firstOrNull()
+                    withContext(Dispatchers.Main) {
+                        _uiState.update {
+                            it.copy(
+                                project = loaded,
+                                currentProjectDir = firstSummary.dir,
+                                projectSummaries = summaries,
+                                activeSceneId = firstScene?.id,
+                                customHtml = firstScene?.composition?.customHtml ?: "",
+                                customCss = firstScene?.composition?.customCss ?: "",
+                                customJs = firstScene?.composition?.customJs ?: ""
+                            )
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed loading initial project from disk", e)
+                }
+            }
         }
         refreshGallery()
         observeVoiceoverService()
@@ -174,11 +203,15 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     fun selectScene(sceneId: String) {
         val startSec = _uiState.value.project.getSceneStartTime(sceneId)
+        val scene = _uiState.value.project.scenes.find { it.id == sceneId }
         _uiState.update {
             it.copy(
                 activeSceneId = sceneId,
                 selectedElementId = null,
-                currentTimeSec = startSec
+                currentTimeSec = startSec,
+                customHtml = scene?.composition?.customHtml ?: "",
+                customCss = scene?.composition?.customCss ?: "",
+                customJs = scene?.composition?.customJs ?: ""
             )
         }
     }
@@ -187,31 +220,45 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         pushUndo()
         val currentScenes = _uiState.value.project.scenes
         val newIndex = currentScenes.size
+        val newSceneId = "scene-${String.format("%02d", newIndex + 1)}"
+        val title = "Сцена ${newIndex + 1}"
+        val initialHtml = """
+            <div id="stage">
+                <div class="scene-container">
+                    <h1 class="title">$title</h1>
+                </div>
+            </div>
+        """.trimIndent()
+        val initialCss = """
+            #stage {
+                position: absolute;
+                inset: 0;
+                width: 100%;
+                height: 100%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: #0c0e14;
+            }
+            .title {
+                font-family: 'Montserrat', sans-serif;
+                font-size: 48px;
+                font-weight: 800;
+                color: #ffffff;
+            }
+        """.trimIndent()
+        val initialJs = """console.log("$title initialized");"""
+
         val newScene = HyperFrameScene(
-            id = "scene_${UUID.randomUUID().toString().take(8)}",
+            id = newSceneId,
             index = newIndex,
-            title = "Сцена ${newIndex + 1}",
-            script = "Текст диктора для новой сцены...",
-            durationSec = 4.0f,
+            title = title,
+            durationSec = 5.0f,
             transition = SceneTransitionType.FADE,
-            avatar = SceneAvatarSettings(
-                characterName = "Alex Host",
-                isEnabled = false
-            ),
             composition = SceneComposition(
-                backgroundGradient = "radial-gradient(circle at 50% 30%, #1e1b4b 0%, #09081a 100%)"
-            ),
-            elements = listOf(
-                HyperFrameElement(
-                    id = "el_${UUID.randomUUID().toString().take(6)}",
-                    type = ElementType.TEXT,
-                    name = "Заголовок сцены",
-                    textContent = "СЦЕНА ${newIndex + 1}",
-                    fontSizeSp = 40,
-                    textColorHex = "#FFFFFF",
-                    transform = ElementTransform(xPercent = 50f, yPercent = 40f, scale = 1.0f),
-                    animation = HyperFrameAnimation(type = MediaAnimationType.ZOOM_IN)
-                )
+                customHtml = initialHtml,
+                customCss = initialCss,
+                customJs = initialJs
             )
         )
 
@@ -220,9 +267,13 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.update {
             it.copy(
                 project = updatedProject,
-                activeSceneId = newScene.id
+                activeSceneId = newScene.id,
+                customHtml = initialHtml,
+                customCss = initialCss,
+                customJs = initialJs
             )
         }
+        triggerDebouncedAutosave()
     }
 
     fun duplicateScene(sceneId: String) {
@@ -507,48 +558,241 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.update { it.copy(activePanel = panel) }
     }
 
-    fun createNewProject() {
-        pushUndo()
-        val newProj = DefaultProjectFactory.createDefaultProject()
-        _uiState.update {
-            it.copy(
-                project = newProj,
-                activeSceneId = newProj.scenes.firstOrNull()?.id,
-                selectedElementId = null,
-                currentTimeSec = 0f,
-                isPlaying = false,
-                activePanel = StudioActivePanel.SCRIPT
-            )
+    fun createNewProject(
+        name: String = "My Project",
+        aspectRatio: AspectRatioType = AspectRatioType.PORTRAIT_9_16,
+        resolution: RenderResolution = RenderResolution.HD_720P
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val newProj = projectFileManager.createNewProject(name, aspectRatio, resolution)
+                val summaries = projectFileManager.listProjects()
+                val targetDir = summaries.find { it.name == name }?.dir
+                val firstScene = newProj.scenes.firstOrNull()
+                withContext(Dispatchers.Main) {
+                    _uiState.update {
+                        it.copy(
+                            project = newProj,
+                            currentProjectDir = targetDir,
+                            projectSummaries = summaries,
+                            activeSceneId = firstScene?.id,
+                            customHtml = firstScene?.composition?.customHtml ?: "",
+                            customCss = firstScene?.composition?.customCss ?: "",
+                            customJs = firstScene?.composition?.customJs ?: "",
+                            currentTimeSec = 0f,
+                            isPlaying = false,
+                            isCodeModified = false
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error creating new project $name", e)
+            }
+        }
+    }
+
+    fun openProject(dir: File) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val loaded = projectFileManager.loadProject(dir)
+                val firstScene = loaded.scenes.firstOrNull()
+                val summaries = projectFileManager.listProjects()
+                withContext(Dispatchers.Main) {
+                    _uiState.update {
+                        it.copy(
+                            project = loaded,
+                            currentProjectDir = dir,
+                            projectSummaries = summaries,
+                            activeSceneId = firstScene?.id,
+                            customHtml = firstScene?.composition?.customHtml ?: "",
+                            customCss = firstScene?.composition?.customCss ?: "",
+                            customJs = firstScene?.composition?.customJs ?: "",
+                            currentTimeSec = 0f,
+                            isPlaying = false,
+                            isCodeModified = false
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error opening project ${dir.name}", e)
+            }
+        }
+    }
+
+    fun setProjectManagerOpen(open: Boolean) {
+        _uiState.update { it.copy(isProjectManagerOpen = open) }
+        if (open) refreshProjectsList()
+    }
+
+    fun refreshProjectsList() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val list = projectFileManager.listProjects()
+            withContext(Dispatchers.Main) {
+                _uiState.update { it.copy(projectSummaries = list) }
+            }
+        }
+    }
+
+    fun duplicateProject(dir: File) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                projectFileManager.duplicateProject(dir)
+                refreshProjectsList()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error duplicating project ${dir.name}", e)
+            }
+        }
+    }
+
+    fun renameProject(dir: File, newName: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val newDir = projectFileManager.renameProject(dir, newName)
+                if (_uiState.value.currentProjectDir?.absolutePath == dir.absolutePath) {
+                    openProject(newDir)
+                } else {
+                    refreshProjectsList()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error renaming project ${dir.name}", e)
+            }
+        }
+    }
+
+    fun deleteProject(dir: File) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                projectFileManager.deleteProject(dir)
+                val remaining = projectFileManager.listProjects()
+                withContext(Dispatchers.Main) {
+                    _uiState.update { it.copy(projectSummaries = remaining) }
+                    if (_uiState.value.currentProjectDir?.absolutePath == dir.absolutePath) {
+                        val next = remaining.firstOrNull()
+                        if (next != null) {
+                            openProject(next.dir)
+                        } else {
+                            createNewProject()
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error deleting project ${dir.name}", e)
+            }
+        }
+    }
+
+    fun exportProjectToHfp(dir: File): File? {
+        return try {
+            val exportDir = File(projectFileManager.getHfProjectsRoot(), "exports").apply { mkdirs() }
+            val targetFile = File(exportDir, "${dir.name}.hfp")
+            projectFileManager.exportProjectToHfp(dir, targetFile)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error exporting .hfp for ${dir.name}", e)
+            null
+        }
+    }
+
+    fun importProjectFromHfp(file: File) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val importedDir = projectFileManager.importProjectFromHfp(file)
+                openProject(importedDir)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error importing project from ${file.name}", e)
+            }
+        }
+    }
+
+    fun saveCurrentProjectToDisk() {
+        val dir = _uiState.value.currentProjectDir ?: return
+        val proj = _uiState.value.project
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                projectFileManager.saveProject(proj, dir)
+                withContext(Dispatchers.Main) {
+                    _uiState.update { it.copy(isCodeModified = false) }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error saving project to disk", e)
+            }
+        }
+    }
+
+    fun saveCurrentSceneCodeNow() {
+        autosaveJob?.cancel()
+        val dir = _uiState.value.currentProjectDir
+        val sceneId = _uiState.value.activeSceneId
+        val state = _uiState.value
+        if (dir != null && sceneId != null) {
+            viewModelScope.launch(Dispatchers.IO) {
+                try {
+                    projectFileManager.saveSceneCodeFiles(dir, sceneId, state.customHtml, state.customCss, state.customJs)
+                    projectFileManager.saveProject(state.project, dir)
+                    withContext(Dispatchers.Main) {
+                        _uiState.update { it.copy(isCodeModified = false) }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed saving scene code files", e)
+                }
+            }
+        }
+    }
+
+    fun triggerDebouncedAutosave() {
+        _uiState.update { it.copy(isCodeModified = true) }
+        autosaveJob?.cancel()
+        autosaveJob = viewModelScope.launch(Dispatchers.IO) {
+            delay(600) // 600ms debounce
+            val dir = _uiState.value.currentProjectDir ?: return@launch
+            val sceneId = _uiState.value.activeSceneId ?: return@launch
+            val state = _uiState.value
+            try {
+                projectFileManager.saveSceneCodeFiles(dir, sceneId, state.customHtml, state.customCss, state.customJs)
+                projectFileManager.saveProject(state.project, dir)
+                withContext(Dispatchers.Main) {
+                    _uiState.update { it.copy(isCodeModified = false) }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Autosave failed", e)
+            }
         }
     }
 
     fun setProjectName(name: String) {
         _uiState.update { it.copy(project = it.project.copy(name = name)) }
+        triggerDebouncedAutosave()
     }
 
     fun setAspectRatio(ratio: AspectRatioType) {
         pushUndo()
         _uiState.update { it.copy(project = it.project.copy(aspectRatio = ratio)) }
+        triggerDebouncedAutosave()
     }
 
     fun setResolution(res: RenderResolution) {
         _uiState.update { it.copy(project = it.project.copy(resolution = res)) }
+        triggerDebouncedAutosave()
     }
 
     fun openCodeEditor(open: Boolean) {
-        _uiState.update {
-            if (open) {
-                val compiled = getCompiledHtmlForPreview()
+        if (open) {
+            val scene = _uiState.value.activeScene
+            _uiState.update {
                 it.copy(
                     isCodeEditorOpen = true,
-                    customHtml = compiled,
-                    customCss = "",
-                    customJs = ""
+                    customHtml = scene?.composition?.customHtml ?: "",
+                    customCss = scene?.composition?.customCss ?: "",
+                    customJs = scene?.composition?.customJs ?: ""
                 )
-            } else {
-                it.copy(isCodeEditorOpen = false)
             }
+        } else {
+            _uiState.update { it.copy(isCodeEditorOpen = false) }
         }
+    }
+
+    fun openCodeEditorForFile(sceneId: String, tabIndex: Int) {
+        selectScene(sceneId)
+        openCodeEditor(true)
     }
 
     fun openGallery(open: Boolean) {
@@ -700,14 +944,28 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     // --- Code IDE ---
 
     fun updateCustomCode(html: String, css: String, js: String) {
-        _uiState.update {
-            it.copy(
+        val activeId = _uiState.value.activeSceneId ?: _uiState.value.project.scenes.firstOrNull()?.id
+        _uiState.update { current ->
+            val updatedScenes = current.project.scenes.map { sc ->
+                if (sc.id == activeId) {
+                    sc.copy(
+                        composition = sc.composition.copy(
+                            customHtml = html,
+                            customCss = css,
+                            customJs = js
+                        )
+                    )
+                } else sc
+            }
+            current.copy(
                 customHtml = html,
                 customCss = css,
                 customJs = js,
-                isCustomCodeActive = true
+                isCustomCodeActive = true,
+                project = current.project.copy(scenes = updatedScenes)
             )
         }
+        triggerDebouncedAutosave()
     }
 
     fun resetCustomCode() {

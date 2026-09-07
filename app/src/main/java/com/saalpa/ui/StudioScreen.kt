@@ -18,11 +18,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import com.saalpa.ui.components.ArchitectureExplainerModal
+import com.saalpa.ui.components.CanvasWorkspace
 import com.saalpa.ui.components.CodeEditor
 import com.saalpa.ui.components.ExportProgressModal
 import com.saalpa.ui.components.GalleryView
 import com.saalpa.ui.components.HyperFramesStudioLayout
+import com.saalpa.ui.components.ProjectManagerDialog
 import com.saalpa.ui.theme.StudioBg
+import java.io.File
 
 @Composable
 fun StudioScreen(
@@ -51,6 +54,25 @@ fun StudioScreen(
         }
     }
 
+    // HFP Project File Import Picker
+    val hfpPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            try {
+                val inputStream = context.contentResolver.openInputStream(uri)
+                if (inputStream != null) {
+                    val tempFile = File(context.cacheDir, "import_${System.currentTimeMillis()}.hfp")
+                    tempFile.outputStream().use { out -> inputStream.copyTo(out) }
+                    viewModel.importProjectFromHfp(tempFile)
+                    Toast.makeText(context, "Проект импортирован", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(context, "Ошибка импорта: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     // Microphone Permission Launcher
     val micPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -70,15 +92,31 @@ fun StudioScreen(
             .navigationBarsPadding()
     ) {
         if (uiState.isCodeEditorOpen) {
-            // Full Screen Code IDE
+            // Full Screen Code IDE with tabs (HTML, CSS, JS) and Live Preview
             CodeEditor(
+                sceneId = uiState.activeSceneId ?: "scene-01",
+                sceneTitle = uiState.activeScene?.title ?: "Сцена 1",
+                scenes = uiState.project.scenes,
                 html = uiState.customHtml,
                 css = uiState.customCss,
                 js = uiState.customJs,
-                isModified = uiState.isCustomCodeActive,
+                isModified = uiState.isCodeModified,
                 onCodeChange = { h, c, j -> viewModel.updateCustomCode(h, c, j) },
-                onReset = { viewModel.resetCustomCode() },
+                onSaveCode = { viewModel.saveCurrentSceneCodeNow() },
+                onSelectScene = { viewModel.selectScene(it) },
                 onBackToStudio = { viewModel.openCodeEditor(false) },
+                previewContent = {
+                    CanvasWorkspace(
+                        htmlContent = viewModel.getCompiledHtmlForPreview(),
+                        aspectRatio = uiState.project.aspectRatio,
+                        currentTimeSec = uiState.currentTimeSec,
+                        totalDurationSec = uiState.totalDurationSec,
+                        activeScene = uiState.activeScene,
+                        isPlaying = uiState.isPlaying,
+                        onTogglePlay = { viewModel.togglePlay() },
+                        jsBridge = viewModel.jsBridge
+                    )
+                },
                 modifier = Modifier.fillMaxSize()
             )
         } else if (uiState.isGalleryOpen) {
@@ -103,6 +141,8 @@ fun StudioScreen(
                 onNewProject = { viewModel.createNewProject() },
                 onSelectAspectRatio = { viewModel.setAspectRatio(it) },
                 onOpenCodeEditor = { viewModel.openCodeEditor(true) },
+                onOpenProjectManager = { viewModel.setProjectManagerOpen(true) },
+                onOpenCodeFile = { sceneId, tabIndex -> viewModel.openCodeEditorForFile(sceneId, tabIndex) },
                 onOpenGallery = { viewModel.openGallery(true) },
                 onOpenExplainer = { viewModel.setShowExplainer(true) },
                 onExportClick = { viewModel.startRender() },
@@ -149,6 +189,27 @@ fun StudioScreen(
                 },
                 onStopRecordingVoiceover = { viewModel.stopVoiceoverRecording() },
                 onPlayRecordedVoiceover = { viewModel.playRecordedVoiceover() }
+            )
+        }
+
+        // Project Manager Modal Dialog
+        if (uiState.isProjectManagerOpen) {
+            ProjectManagerDialog(
+                projects = uiState.projectSummaries,
+                currentProjectDir = uiState.currentProjectDir,
+                onDismiss = { viewModel.setProjectManagerOpen(false) },
+                onOpenProject = { viewModel.openProject(it) },
+                onCreateNewProject = { name, ratio, res -> viewModel.createNewProject(name, ratio, res) },
+                onDuplicateProject = { viewModel.duplicateProject(it) },
+                onRenameProject = { dir, newName -> viewModel.renameProject(dir, newName) },
+                onDeleteProject = { viewModel.deleteProject(it) },
+                onExportHfp = { dir ->
+                    val exported = viewModel.exportProjectToHfp(dir)
+                    if (exported != null) {
+                        Toast.makeText(context, "Экспортировано: ${exported.name}", Toast.LENGTH_LONG).show()
+                    }
+                },
+                onImportHfp = { hfpPickerLauncher.launch("*/*") }
             )
         }
 

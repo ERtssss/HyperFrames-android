@@ -15,13 +15,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Code
-import androidx.compose.material.icons.filled.FolderZip
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FormatPaint
-import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.ViewCarousel
-import androidx.compose.material.icons.filled.Web
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -39,22 +36,22 @@ import com.saalpa.ui.theme.StudioAccent
 import com.saalpa.ui.theme.StudioAccentContainer
 import com.saalpa.ui.theme.StudioAccentLight
 import com.saalpa.ui.theme.StudioBorder
-import com.saalpa.ui.theme.StudioBorderSubtle
 import com.saalpa.ui.theme.StudioSurface
-import com.saalpa.ui.theme.StudioSurfaceElevated
 import com.saalpa.ui.theme.StudioSurfaceVariant
 import com.saalpa.ui.theme.StudioTextMuted
 import com.saalpa.ui.theme.StudioTextPrimary
 import com.saalpa.ui.theme.StudioTextSecondary
 
 enum class StudioActivePanel(val title: String, val icon: ImageVector) {
-    SCRIPT("Сценарий & Сцены", Icons.Default.ViewCarousel),
-    INSPECTOR("Инспектор", Icons.Default.FormatPaint),
-    VOICE("Голос & Озвучка", Icons.Default.RecordVoiceOver),
-    MEDIA("Медиа-Хаб", Icons.Default.FolderZip);
+    SCENES("Scenes", Icons.Default.ViewCarousel),
+    SCRIPT("Script", Icons.Default.Description),
+    FILES("Files", Icons.Default.Folder),
+    INSPECTOR("Inspector", Icons.Default.FormatPaint);
 
     companion object {
-        val AVATAR_VOICE get() = VOICE
+        val VOICE get() = SCRIPT
+        val MEDIA get() = FILES
+        val AVATAR_VOICE get() = SCRIPT
     }
 }
 
