@@ -14,10 +14,6 @@ jobs:
     name: Build Android APK
     runs-on: ubuntu-latest
 
-    defaults:
-      run:
-        working-directory: HyperFrames-android-main
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -29,6 +25,11 @@ jobs:
           java-version: '17'
           cache: gradle
 
+      - name: Check project files
+        run: |
+          pwd
+          ls -la
+
       - name: Make Gradle executable
         run: chmod +x ./gradlew
 
@@ -39,5 +40,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: HyperFrames-debug
-          path: HyperFrames-android-main/app/build/outputs/apk/debug/*.apk
+          path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
